@@ -150,6 +150,34 @@
       <div class="output" id="dl-status"></div>
     </section>
 
+    <!-- Share Object -->
+    <section>
+      <h2>Share Object</h2>
+      <div class="label">Object ID (hex)</div>
+      <input id="share-object-id" type="text" placeholder="e.g. 0e90d697f504..." style="margin-bottom:0.5rem" />
+      <div class="label">Expires in</div>
+      <div class="row">
+        <input id="share-duration" type="number" value="24" min="1" style="width:5rem" />
+        <select id="share-unit" style="background:#1a1a1a; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:0.5rem;">
+          <option value="3600000">hours</option>
+          <option value="86400000" selected>days</option>
+          <option value="604800000">weeks</option>
+        </select>
+        <button id="btn-share">Generate Link</button>
+      </div>
+      <div class="output" id="share-status"></div>
+      <hr />
+      <div class="label">Download from Share URL</div>
+      <input id="share-url" type="text" placeholder="Paste share URL here..." style="margin-bottom:0.5rem" />
+      <div class="label">Filename</div>
+      <div class="row">
+        <input id="share-filename" type="text" placeholder="e.g. photo.jpg" />
+        <button id="btn-share-download">Download</button>
+      </div>
+      <progress id="share-progress" max="100" value="0" style="display:none"></progress>
+      <div class="output" id="share-dl-status"></div>
+    </section>
+
     <!-- Sign / Verify -->
     <section>
       <h2>Sign &amp; Verify</h2>
@@ -598,6 +626,85 @@
         const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
 
         // trigger browser save dialog
+        const blob = new Blob([data]);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+
+        progress.value = progress.max;
+        status.innerHTML = `File: ${filename}\nSize: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Saved to disk!</span>`;
+      } catch (e) {
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    // -- Share Object --
+    document.getElementById('btn-share').addEventListener('click', async () => {
+      const status = document.getElementById('share-status');
+      const objectId = document.getElementById('share-object-id').value.trim();
+      const duration = parseFloat(document.getElementById('share-duration').value);
+      const unit = parseInt(document.getElementById('share-unit').value);
+
+      if (!objectId) {
+        status.innerHTML = '<span class="fail">Enter an Object ID</span>';
+        return;
+      }
+
+      try {
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
+
+        status.textContent = 'Fetching object...';
+        const obj = await sdk.object(objectId);
+
+        const validUntilMs = Date.now() + (duration * unit);
+        const shareUrl = sdk.shareObject(obj, validUntilMs);
+
+        const expiresAt = new Date(validUntilMs).toLocaleString();
+        status.innerHTML = `<span class="pass">Share link created!</span>\nExpires: ${expiresAt}\n\n<a href="${shareUrl}" target="_blank" rel="noopener" style="color:#60a5fa; word-break:break-all;">${shareUrl}</a>`;
+
+        document.getElementById('share-url').value = shareUrl;
+      } catch (e) {
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    document.getElementById('btn-share-download').addEventListener('click', async () => {
+      const status = document.getElementById('share-dl-status');
+      const progress = document.getElementById('share-progress');
+      const shareUrl = document.getElementById('share-url').value.trim();
+      const filename = document.getElementById('share-filename').value.trim() || 'download';
+
+      progress.style.display = 'none';
+      progress.value = 0;
+
+      if (!shareUrl) {
+        status.innerHTML = '<span class="fail">Enter a share URL</span>';
+        return;
+      }
+
+      try {
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
+
+        status.textContent = 'Fetching shared object...';
+        const obj = await sdk.sharedObject(shareUrl);
+        const size = obj.size();
+        status.innerHTML = `Object found: ${formatSize(size)}`;
+
+        progress.style.display = 'block';
+        status.textContent = 'Downloading...';
+
+        const downloadStart = performance.now();
+        const data = await sdk.downloadWithProgress(obj, (current, total) => {
+          progress.max = total;
+          progress.value = current;
+          status.textContent = `Downloading... ${current}/${total} slabs`;
+        });
+        const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+
         const blob = new Blob([data]);
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
