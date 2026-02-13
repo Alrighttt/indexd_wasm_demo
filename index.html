@@ -22,6 +22,10 @@
     .fail { color: #f87171; }
     #loading { text-align: center; padding: 2rem; color: #888; }
     #app { display: none; }
+    .dropzone { border: 2px dashed #333; border-radius: 8px; padding: 2rem; text-align: center; color: #666; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
+    .dropzone:hover, .dropzone.dragover { border-color: #1a6b3c; color: #4ade80; }
+    .dropzone .file-info { color: #e0e0e0; font-size: 0.85rem; margin-top: 0.5rem; }
+    hr { border: none; border-top: 1px solid #2a2a2a; margin: 1rem 0; }
   </style>
 </head>
 <body>
@@ -30,22 +34,26 @@
   <div id="loading">Loading WASM module...</div>
 
   <div id="app">
-    <!-- Recovery Phrase -->
+    <!-- Configuration -->
     <section>
-      <h2>Recovery Phrase</h2>
+      <h2>Configuration</h2>
+      <div class="label">Indexer URL</div>
+      <input id="cfg-url" type="text" placeholder="https://indexer.example.com" style="margin-bottom:0.5rem" />
+      <div class="label">App Key (hex seed)</div>
+      <input id="cfg-key" type="text" placeholder="e.g. ab12cd34..." style="margin-bottom:0.5rem" />
+      <hr />
+      <div class="label">Recovery Phrase</div>
       <div class="row">
+        <input id="phrase" type="text" placeholder="recovery phrase appears here" />
         <button id="btn-generate">Generate</button>
         <button id="btn-validate">Validate</button>
       </div>
-      <input id="phrase" type="text" placeholder="recovery phrase appears here" />
       <div class="output" id="phrase-output"></div>
     </section>
 
     <!-- Register -->
     <section>
       <h2>Register App</h2>
-      <div class="label">Indexer URL</div>
-      <input id="reg-url" type="text" placeholder="https://indexer.example.com" style="margin-bottom:0.5rem" />
       <div class="label">App Name</div>
       <input id="reg-name" type="text" placeholder="My App" style="margin-bottom:0.5rem" />
       <div class="label">App Description</div>
@@ -71,9 +79,9 @@
         </div>
       </div>
       <div id="reg-finalize" style="display:none; margin-top:0.75rem;">
-        <div class="label">Recovery Phrase (12-word BIP-39 mnemonic)</div>
+        <div class="label">Recovery Phrase (uses the phrase from Configuration above, or enter one here)</div>
         <div class="row">
-          <input id="reg-mnemonic" type="text" placeholder="enter your recovery phrase" />
+          <input id="reg-mnemonic" type="text" placeholder="leave blank to use the phrase above" />
           <button id="btn-reg-generate">Generate</button>
         </div>
         <div class="row" style="margin-top:0.5rem">
@@ -86,10 +94,6 @@
     <!-- Upload Text -->
     <section>
       <h2>Upload Text</h2>
-      <div class="label">Indexer URL</div>
-      <input id="ul-url" type="text" placeholder="https://indexer.example.com" style="margin-bottom:0.5rem" />
-      <div class="label">App Key (64-byte hex keypair or 32-byte hex seed)</div>
-      <input id="ul-key" type="text" placeholder="e.g. ab12cd34..." style="margin-bottom:0.5rem" />
       <div class="label">Text to upload</div>
       <textarea id="ul-text" rows="4" placeholder="Type or paste text here..."></textarea>
       <div class="row" style="margin-top:0.5rem">
@@ -98,22 +102,46 @@
       <div class="output" id="ul-status"></div>
     </section>
 
-    <!-- Download Object -->
+    <!-- Download Text -->
     <section>
-      <h2>Download Object</h2>
-      <div class="label">Indexer URL</div>
-      <input id="dl-url" type="text" placeholder="https://indexer.example.com" style="margin-bottom:0.5rem" />
-      <div class="label">App Key (64-byte hex keypair or 32-byte hex seed)</div>
-      <input id="dl-key" type="text" placeholder="e.g. ab12cd34..." style="margin-bottom:0.5rem" />
+      <h2>Download Text</h2>
       <div class="label">Object ID (hex)</div>
       <div class="row">
-        <input id="dl-object-id" type="text" placeholder="e.g. 0e90d697f504..." />
+        <input id="dt-object-id" type="text" placeholder="e.g. 0e90d697f504..." />
+        <button id="btn-download-text">Download</button>
+      </div>
+      <div class="output" id="dt-status"></div>
+      <div class="label" style="margin-top:0.75rem">Contents</div>
+      <div class="output" id="dt-contents" style="min-height:6rem; max-height:24rem; overflow-y:auto;"></div>
+    </section>
+
+    <!-- Upload File -->
+    <section>
+      <h2>Upload File</h2>
+      <div class="dropzone" id="uf-dropzone">
+        Drop a file here or click to select
+        <input type="file" id="uf-file" style="display:none" />
+        <div class="file-info" id="uf-file-info"></div>
+      </div>
+      <div class="row" style="margin-top:0.5rem">
+        <button id="btn-upload-file">Upload</button>
+      </div>
+      <div class="output" id="uf-status"></div>
+    </section>
+
+    <!-- Download File -->
+    <section>
+      <h2>Download File</h2>
+      <div class="label">Object ID (hex)</div>
+      <input id="dl-object-id" type="text" placeholder="e.g. 0e90d697f504..." style="margin-bottom:0.5rem" />
+      <div class="label">Filename</div>
+      <div class="row">
+        <input id="dl-filename" type="text" placeholder="e.g. photo.jpg" />
         <button id="btn-download">Download</button>
       </div>
       <div class="output" id="dl-status"></div>
-      <div class="label" style="margin-top:0.75rem">File contents</div>
-      <div class="output" id="dl-contents" style="min-height:6rem; max-height:24rem; overflow-y:auto;"></div>
     </section>
+
     <!-- Sign / Verify -->
     <section>
       <h2>Sign &amp; Verify</h2>
@@ -156,6 +184,38 @@
       return bytes;
     }
 
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    }
+
+    // helpers to read shared config
+    function getUrl() { return document.getElementById('cfg-url').value.trim(); }
+    function getKeyHex() { return document.getElementById('cfg-key').value.trim(); }
+
+    async function connectSdk(statusEl) {
+      const url = getUrl();
+      const keyHex = getKeyHex();
+      if (!url || !keyHex) {
+        statusEl.innerHTML = '<span class="fail">Set Indexer URL and App Key in Configuration first</span>';
+        return null;
+      }
+      statusEl.textContent = 'Creating app key...';
+      const seed = fromHex(keyHex);
+      const appKey = new AppKey(seed);
+      statusEl.textContent = `App key created. Public key: ${appKey.publicKey()}\nConnecting to indexer...`;
+      const builder = new Builder(url);
+      const sdk = await builder.connected(appKey);
+      if (!sdk) {
+        statusEl.innerHTML = '<span class="fail">App key not recognized by this indexer. Register first.</span>';
+        return null;
+      }
+      statusEl.innerHTML = '<span class="pass">Connected!</span>';
+      return sdk;
+    }
+
     await init();
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
@@ -193,7 +253,7 @@
       const approvalDiv = document.getElementById('reg-approval');
       const finalizeDiv = document.getElementById('reg-finalize');
       const resultDiv = document.getElementById('reg-result');
-      const url = document.getElementById('reg-url').value.trim();
+      const url = getUrl();
       const name = document.getElementById('reg-name').value.trim();
       const desc = document.getElementById('reg-desc').value.trim();
       const serviceUrl = document.getElementById('reg-service-url').value.trim();
@@ -205,7 +265,7 @@
 
       if (!url || !name || !desc || !serviceUrl) {
         curlDiv.style.display = 'block';
-        curlDiv.innerHTML = '<span class="fail">All fields are required</span>';
+        curlDiv.innerHTML = '<span class="fail">Indexer URL (in Configuration) and all fields are required</span>';
         return;
       }
 
@@ -232,7 +292,7 @@
       const status = document.getElementById('reg-status');
       const approvalDiv = document.getElementById('reg-approval');
       const responseJson = document.getElementById('reg-response').value.trim();
-      const url = document.getElementById('reg-url').value.trim();
+      const url = getUrl();
 
       if (!responseJson) {
         status.style.display = 'block';
@@ -241,7 +301,6 @@
       }
 
       try {
-        // validate JSON parses
         const parsed = JSON.parse(responseJson);
         if (!parsed.responseURL || !parsed.statusURL || !parsed.registerURL) {
           throw new Error('Response must contain responseURL, statusURL, and registerURL');
@@ -294,14 +353,16 @@
     document.getElementById('btn-register').addEventListener('click', async () => {
       const status = document.getElementById('reg-status');
       const resultDiv = document.getElementById('reg-result');
-      const mnemonic = document.getElementById('reg-mnemonic').value.trim();
+      // use register-specific mnemonic if provided, otherwise fall back to config phrase
+      const mnemonic = document.getElementById('reg-mnemonic').value.trim()
+        || document.getElementById('phrase').value.trim();
 
       if (!regBuilder) {
         status.innerHTML += `\n<span class="fail">Complete previous steps first</span>`;
         return;
       }
       if (!mnemonic) {
-        status.innerHTML += `\n<span class="fail">Enter a recovery phrase</span>`;
+        status.innerHTML += `\n<span class="fail">Enter a recovery phrase in Configuration or the field above</span>`;
         return;
       }
 
@@ -312,9 +373,12 @@
         const seed = hex(appKey.export());
         const pubkey = appKey.publicKey();
 
+        // auto-fill the config app key field
+        document.getElementById('cfg-key').value = seed;
+
         status.innerHTML += `\n<span class="pass">Registered successfully!</span>`;
         resultDiv.style.display = 'block';
-        resultDiv.innerHTML = `<span class="pass">Registration complete!</span>\n\nApp Key Seed (use this in Upload/Download):\n${seed}\n\nPublic Key:\n${pubkey}\n\n<span style="color:#fbbf24;">Save your recovery phrase and app key seed securely!</span>`;
+        resultDiv.innerHTML = `<span class="pass">Registration complete!</span>\n\nApp Key Seed (auto-filled in Configuration above):\n${seed}\n\nPublic Key:\n${pubkey}\n\n<span style="color:#fbbf24;">Save your recovery phrase and app key seed securely!</span>`;
         regBuilder = null;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
@@ -324,30 +388,18 @@
     // -- Upload Text --
     document.getElementById('btn-upload').addEventListener('click', async () => {
       const status = document.getElementById('ul-status');
-      const url = document.getElementById('ul-url').value.trim();
-      const keyHex = document.getElementById('ul-key').value.trim();
       const text = document.getElementById('ul-text').value;
 
-      if (!url || !keyHex || !text) {
-        status.innerHTML = '<span class="fail">All three fields are required</span>';
+      if (!text) {
+        status.innerHTML = '<span class="fail">Enter some text to upload</span>';
         return;
       }
 
       try {
-        status.textContent = 'Creating app key...';
-        const seed = fromHex(keyHex);
-        const appKey = new AppKey(seed);
-        status.textContent = `App key created. Public key: ${appKey.publicKey()}\nConnecting to indexer...`;
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
 
-        const builder = new Builder(url);
-        const sdk = await builder.connected(appKey);
-
-        if (!sdk) {
-          status.innerHTML = '<span class="fail">App key not recognized by this indexer. Register first.</span>';
-          return;
-        }
-
-        status.innerHTML = '<span class="pass">Connected!</span>\nUploading... <span style="color:#888">(check browser console for detailed progress)</span>';
+        status.innerHTML += '\nUploading... <span style="color:#888">(check browser console for detailed progress)</span>';
 
         const uploadStart = performance.now();
         const data = new TextEncoder().encode(text);
@@ -356,56 +408,154 @@
         const objectId = obj.id();
         const size = obj.size();
 
-        status.innerHTML = `<span class="pass">Connected!</span>\nUpload complete (${size} bytes) in ${elapsed}s. Pinning to indexer...`;
+        status.innerHTML += `\nUpload complete (${size} bytes) in ${elapsed}s. Pinning to indexer...`;
 
         await sdk.pinObject(obj);
 
-        status.innerHTML = `<span class="pass">Connected!</span>\nUpload complete (${size} bytes) in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
+        status.innerHTML += `\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
     });
 
-    // -- Download Object --
-    document.getElementById('btn-download').addEventListener('click', async () => {
-      const status = document.getElementById('dl-status');
-      const contents = document.getElementById('dl-contents');
-      const url = document.getElementById('dl-url').value.trim();
-      const keyHex = document.getElementById('dl-key').value.trim();
-      const objectId = document.getElementById('dl-object-id').value.trim();
+    // -- Download Text --
+    document.getElementById('btn-download-text').addEventListener('click', async () => {
+      const status = document.getElementById('dt-status');
+      const contents = document.getElementById('dt-contents');
+      const objectId = document.getElementById('dt-object-id').value.trim();
 
       contents.textContent = '';
 
-      if (!url || !keyHex || !objectId) {
-        status.innerHTML = '<span class="fail">All three fields are required</span>';
+      if (!objectId) {
+        status.innerHTML = '<span class="fail">Enter an Object ID</span>';
         return;
       }
 
       try {
-        status.textContent = 'Creating app key...';
-        const seed = fromHex(keyHex);
-        const appKey = new AppKey(seed);
-        status.textContent = `App key created. Public key: ${appKey.publicKey()}\nConnecting to indexer...`;
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
 
-        const builder = new Builder(url);
-        const sdk = await builder.connected(appKey);
-
-        if (!sdk) {
-          status.innerHTML = '<span class="fail">App key not recognized by this indexer. Register first.</span>';
-          return;
-        }
-
-        status.innerHTML = '<span class="pass">Connected!</span>\nFetching object metadata...';
+        status.innerHTML += '\nFetching object metadata...';
 
         const obj = await sdk.object(objectId);
         const size = obj.size();
-        status.innerHTML = `<span class="pass">Connected!</span>\nObject found: ${size} bytes\nDownloading...`;
+        status.innerHTML += `\nObject found: ${formatSize(size)}\nDownloading...`;
 
+        const downloadStart = performance.now();
         const data = await sdk.download(obj);
+        const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
         const text = new TextDecoder('utf-8', { fatal: false }).decode(data);
 
-        status.innerHTML = `<span class="pass">Connected!</span>\nObject: ${objectId}\nSize: ${size} bytes\n<span class="pass">Download complete!</span>`;
+        status.innerHTML += `\nSize: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Download complete!</span>`;
         contents.textContent = text;
+      } catch (e) {
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    // -- Upload File --
+    let selectedFile = null;
+    const dropzone = document.getElementById('uf-dropzone');
+    const fileInput = document.getElementById('uf-file');
+    const fileInfo = document.getElementById('uf-file-info');
+
+    function setFile(file) {
+      selectedFile = file;
+      fileInfo.textContent = `${file.name} (${formatSize(file.size)})`;
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) setFile(fileInput.files[0]);
+    });
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+    });
+
+    document.getElementById('btn-upload-file').addEventListener('click', async () => {
+      const status = document.getElementById('uf-status');
+      const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2 GB - wasm32 memory limit
+
+      if (!selectedFile) {
+        status.innerHTML = '<span class="fail">Select a file first</span>';
+        return;
+      }
+
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        status.innerHTML = `<span class="fail">File too large (${formatSize(selectedFile.size)}). Maximum is 2 GB due to WASM memory limits.</span>`;
+        return;
+      }
+
+      try {
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
+
+        status.innerHTML += '\nReading file...';
+
+        const buffer = await selectedFile.arrayBuffer();
+        const data = new Uint8Array(buffer);
+
+        status.innerHTML += `\nUploading ${selectedFile.name} (${formatSize(data.length)})... <span style="color:#888">(check browser console for detailed progress)</span>`;
+
+        const uploadStart = performance.now();
+        const obj = await sdk.upload(data);
+        const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
+        const objectId = obj.id();
+        const size = obj.size();
+
+        status.innerHTML += `\nUpload complete (${formatSize(size)}) in ${elapsed}s. Pinning to indexer...`;
+
+        await sdk.pinObject(obj);
+
+        status.innerHTML += `\nFile: ${selectedFile.name}\nSize: ${formatSize(size)}\nUpload + pin completed in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
+      } catch (e) {
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    // -- Download File --
+    document.getElementById('btn-download').addEventListener('click', async () => {
+      const status = document.getElementById('dl-status');
+      const objectId = document.getElementById('dl-object-id').value.trim();
+      const filename = document.getElementById('dl-filename').value.trim() || 'download';
+
+      if (!objectId) {
+        status.innerHTML = '<span class="fail">Enter an Object ID</span>';
+        return;
+      }
+
+      try {
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
+
+        status.innerHTML += '\nFetching object metadata...';
+
+        const obj = await sdk.object(objectId);
+        const size = obj.size();
+        status.innerHTML += `\nObject found: ${formatSize(size)}\nDownloading...`;
+
+        const downloadStart = performance.now();
+        const data = await sdk.download(obj);
+        const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+
+        // trigger browser save dialog
+        const blob = new Blob([data]);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+
+        status.innerHTML += `\nFile: ${filename}\nSize: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Saved to disk!</span>`;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
