@@ -26,6 +26,10 @@
     .dropzone:hover, .dropzone.dragover { border-color: #1a6b3c; color: #4ade80; }
     .dropzone .file-info { color: #e0e0e0; font-size: 0.85rem; margin-top: 0.5rem; }
     hr { border: none; border-top: 1px solid #2a2a2a; margin: 1rem 0; }
+    progress { width: 100%; height: 8px; appearance: none; border: none; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
+    progress::-webkit-progress-bar { background: #1a1a1a; border-radius: 4px; }
+    progress::-webkit-progress-value { background: #1a6b3c; border-radius: 4px; }
+    progress::-moz-progress-bar { background: #1a6b3c; border-radius: 4px; }
   </style>
 </head>
 <body>
@@ -99,6 +103,7 @@
       <div class="row" style="margin-top:0.5rem">
         <button id="btn-upload">Upload</button>
       </div>
+      <progress id="ul-progress" max="100" value="0" style="display:none"></progress>
       <div class="output" id="ul-status"></div>
     </section>
 
@@ -110,6 +115,7 @@
         <input id="dt-object-id" type="text" placeholder="e.g. 0e90d697f504..." />
         <button id="btn-download-text">Download</button>
       </div>
+      <progress id="dt-progress" max="100" value="0" style="display:none"></progress>
       <div class="output" id="dt-status"></div>
       <div class="label" style="margin-top:0.75rem">Contents</div>
       <div class="output" id="dt-contents" style="min-height:6rem; max-height:24rem; overflow-y:auto;"></div>
@@ -126,6 +132,7 @@
       <div class="row" style="margin-top:0.5rem">
         <button id="btn-upload-file">Upload</button>
       </div>
+      <progress id="uf-progress" max="100" value="0" style="display:none"></progress>
       <div class="output" id="uf-status"></div>
     </section>
 
@@ -139,6 +146,7 @@
         <input id="dl-filename" type="text" placeholder="e.g. photo.jpg" />
         <button id="btn-download">Download</button>
       </div>
+      <progress id="dl-progress" max="100" value="0" style="display:none"></progress>
       <div class="output" id="dl-status"></div>
     </section>
 
@@ -388,6 +396,7 @@
     // -- Upload Text --
     document.getElementById('btn-upload').addEventListener('click', async () => {
       const status = document.getElementById('ul-status');
+      const progress = document.getElementById('ul-progress');
       const text = document.getElementById('ul-text').value;
 
       if (!text) {
@@ -395,20 +404,29 @@
         return;
       }
 
+      progress.style.display = 'none';
+      progress.value = 0;
+
       try {
         const sdk = await connectSdk(status);
         if (!sdk) return;
 
-        status.innerHTML += '\nUploading... <span style="color:#888">(check browser console for detailed progress)</span>';
+        const data = new TextEncoder().encode(text);
+        progress.style.display = 'block';
+        status.textContent = 'Uploading...';
 
         const uploadStart = performance.now();
-        const data = new TextEncoder().encode(text);
-        const obj = await sdk.upload(data);
+        const obj = await sdk.uploadWithProgress(data, (current, total) => {
+          progress.max = total;
+          progress.value = current;
+          status.textContent = `Uploading... ${current}/${total} shards`;
+        });
         const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
         const objectId = obj.id();
         const size = obj.size();
 
-        status.innerHTML += `\nUpload complete (${size} bytes) in ${elapsed}s. Pinning to indexer...`;
+        progress.value = progress.max;
+        status.innerHTML = `Upload complete (${size} bytes) in ${elapsed}s. Pinning to indexer...`;
 
         await sdk.pinObject(obj);
 
@@ -421,10 +439,13 @@
     // -- Download Text --
     document.getElementById('btn-download-text').addEventListener('click', async () => {
       const status = document.getElementById('dt-status');
+      const progress = document.getElementById('dt-progress');
       const contents = document.getElementById('dt-contents');
       const objectId = document.getElementById('dt-object-id').value.trim();
 
       contents.textContent = '';
+      progress.style.display = 'none';
+      progress.value = 0;
 
       if (!objectId) {
         status.innerHTML = '<span class="fail">Enter an Object ID</span>';
@@ -439,14 +460,22 @@
 
         const obj = await sdk.object(objectId);
         const size = obj.size();
-        status.innerHTML += `\nObject found: ${formatSize(size)}\nDownloading...`;
+        status.innerHTML = `Object found: ${formatSize(size)}`;
+
+        progress.style.display = 'block';
+        status.textContent = 'Downloading...';
 
         const downloadStart = performance.now();
-        const data = await sdk.download(obj);
+        const data = await sdk.downloadWithProgress(obj, (current, total) => {
+          progress.max = total;
+          progress.value = current;
+          status.textContent = `Downloading... ${current}/${total} slabs`;
+        });
         const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
         const text = new TextDecoder('utf-8', { fatal: false }).decode(data);
 
-        status.innerHTML += `\nSize: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Download complete!</span>`;
+        progress.value = progress.max;
+        status.innerHTML = `Size: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Download complete!</span>`;
         contents.textContent = text;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
@@ -483,6 +512,7 @@
 
     document.getElementById('btn-upload-file').addEventListener('click', async () => {
       const status = document.getElementById('uf-status');
+      const progress = document.getElementById('uf-progress');
       const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2 GB - wasm32 memory limit
 
       if (!selectedFile) {
@@ -495,6 +525,9 @@
         return;
       }
 
+      progress.style.display = 'none';
+      progress.value = 0;
+
       try {
         const sdk = await connectSdk(status);
         if (!sdk) return;
@@ -504,19 +537,25 @@
         const buffer = await selectedFile.arrayBuffer();
         const data = new Uint8Array(buffer);
 
-        status.innerHTML += `\nUploading ${selectedFile.name} (${formatSize(data.length)})... <span style="color:#888">(check browser console for detailed progress)</span>`;
+        progress.style.display = 'block';
+        status.textContent = `Uploading ${selectedFile.name} (${formatSize(data.length)})...`;
 
         const uploadStart = performance.now();
-        const obj = await sdk.upload(data);
+        const obj = await sdk.uploadWithProgress(data, (current, total) => {
+          progress.max = total;
+          progress.value = current;
+          status.textContent = `Uploading ${selectedFile.name}... ${current}/${total} shards`;
+        });
         const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
         const objectId = obj.id();
         const size = obj.size();
 
-        status.innerHTML += `\nUpload complete (${formatSize(size)}) in ${elapsed}s. Pinning to indexer...`;
+        progress.value = progress.max;
+        status.innerHTML = `Upload complete (${formatSize(size)}) in ${elapsed}s. Pinning to indexer...`;
 
         await sdk.pinObject(obj);
 
-        status.innerHTML += `\nFile: ${selectedFile.name}\nSize: ${formatSize(size)}\nUpload + pin completed in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
+        status.innerHTML = `File: ${selectedFile.name}\nSize: ${formatSize(size)}\nUpload + pin completed in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
@@ -525,8 +564,12 @@
     // -- Download File --
     document.getElementById('btn-download').addEventListener('click', async () => {
       const status = document.getElementById('dl-status');
+      const progress = document.getElementById('dl-progress');
       const objectId = document.getElementById('dl-object-id').value.trim();
       const filename = document.getElementById('dl-filename').value.trim() || 'download';
+
+      progress.style.display = 'none';
+      progress.value = 0;
 
       if (!objectId) {
         status.innerHTML = '<span class="fail">Enter an Object ID</span>';
@@ -541,10 +584,17 @@
 
         const obj = await sdk.object(objectId);
         const size = obj.size();
-        status.innerHTML += `\nObject found: ${formatSize(size)}\nDownloading...`;
+        status.innerHTML = `Object found: ${formatSize(size)}`;
+
+        progress.style.display = 'block';
+        status.textContent = 'Downloading...';
 
         const downloadStart = performance.now();
-        const data = await sdk.download(obj);
+        const data = await sdk.downloadWithProgress(obj, (current, total) => {
+          progress.max = total;
+          progress.value = current;
+          status.textContent = `Downloading... ${current}/${total} slabs`;
+        });
         const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
 
         // trigger browser save dialog
@@ -555,7 +605,8 @@
         a.click();
         URL.revokeObjectURL(a.href);
 
-        status.innerHTML += `\nFile: ${filename}\nSize: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Saved to disk!</span>`;
+        progress.value = progress.max;
+        status.innerHTML = `File: ${filename}\nSize: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Saved to disk!</span>`;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
