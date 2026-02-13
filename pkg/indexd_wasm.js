@@ -736,6 +736,7 @@ export class SDK {
     }
     /**
      * Retrieves a shared object from a signed share URL.
+     * Accepts both `https://` and `sia://` schemes.
      * @param {string} share_url
      * @returns {Promise<PinnedObject>}
      */
