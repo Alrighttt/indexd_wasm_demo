@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>indexd WASM Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 2rem; max-width: 800px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #fff; }
+    h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #b0b0b0; }
+    section { background: #151515; border: 1px solid #2a2a2a; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem; }
+    button { background: #1a6b3c; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; }
+    button:hover { background: #1f8148; }
+    button:disabled { background: #333; color: #666; cursor: not-allowed; }
+    input, textarea { background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; border-radius: 4px; padding: 0.5rem; width: 100%; font-family: monospace; font-size: 0.8rem; }
+    textarea { resize: vertical; min-height: 3rem; }
+    .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+    .output { background: #0d0d0d; border: 1px solid #222; border-radius: 4px; padding: 0.75rem; margin-top: 0.75rem; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; min-height: 2rem; }
+    .label { font-size: 0.75rem; color: #888; margin-bottom: 0.25rem; }
+    .pass { color: #4ade80; }
+    .fail { color: #f87171; }
+    #loading { text-align: center; padding: 2rem; color: #888; }
+    #app { display: none; }
+  </style>
+</head>
+<body>
+  <h1>indexd WASM Demo</h1>
+
+  <div id="loading">Loading WASM module...</div>
+
+  <div id="app">
+    <!-- Recovery Phrase -->
+    <section>
+      <h2>Recovery Phrase</h2>
+      <div class="row">
+        <button id="btn-generate">Generate</button>
+        <button id="btn-validate">Validate</button>
+      </div>
+      <input id="phrase" type="text" placeholder="recovery phrase appears here" />
+      <div class="output" id="phrase-output"></div>
+    </section>
+
+    <!-- Register -->
+    <section>
+      <h2>Register App</h2>
+      <div class="label">Indexer URL</div>
+      <input id="reg-url" type="text" placeholder="https://indexer.example.com" style="margin-bottom:0.5rem" />
+      <div class="label">App Name</div>
+      <input id="reg-name" type="text" placeholder="My App" style="margin-bottom:0.5rem" />
+      <div class="label">App Description</div>
+      <input id="reg-desc" type="text" placeholder="A brief description of your app" style="margin-bottom:0.5rem" />
+      <div class="label">Service URL</div>
+      <input id="reg-service-url" type="text" placeholder="https://myapp.example.com" style="margin-bottom:0.5rem" />
+      <div class="row">
+        <button id="btn-gen-curl">1. Generate curl command</button>
+      </div>
+      <div class="output" id="reg-curl" style="display:none; cursor:pointer;" title="Click to copy"></div>
+      <div id="reg-paste-section" style="display:none; margin-top:0.75rem;">
+        <div class="label">Paste the JSON response from curl here:</div>
+        <textarea id="reg-response" rows="3" placeholder='{"responseURL":"...","statusURL":"...","registerURL":"...","expiration":"..."}'></textarea>
+        <div class="row" style="margin-top:0.5rem">
+          <button id="btn-set-response">2. Continue</button>
+        </div>
+      </div>
+      <div class="output" id="reg-status" style="display:none;"></div>
+      <div id="reg-approval" style="display:none; margin-top:0.75rem;">
+        <div class="label">Approve the connection by visiting the link above, then:</div>
+        <div class="row">
+          <button id="btn-wait-approval">3. Wait for Approval</button>
+        </div>
+      </div>
+      <div id="reg-finalize" style="display:none; margin-top:0.75rem;">
+        <div class="label">Recovery Phrase (12-word BIP-39 mnemonic)</div>
+        <div class="row">
+          <input id="reg-mnemonic" type="text" placeholder="enter your recovery phrase" />
+          <button id="btn-reg-generate">Generate</button>
+        </div>
+        <div class="row" style="margin-top:0.5rem">
+          <button id="btn-register">4. Register</button>
+        </div>
+      </div>
+      <div class="output" id="reg-result" style="display:none; margin-top:0.75rem;"></div>
+    </section>
+
+    <!-- Upload Text -->
+    <section>
+      <h2>Upload Text</h2>
+      <div class="label">Indexer URL</div>
+      <input id="ul-url" type="text" placeholder="https://indexer.example.com" style="margin-bottom:0.5rem" />
+      <div class="label">App Key (64-byte hex keypair or 32-byte hex seed)</div>
+      <input id="ul-key" type="text" placeholder="e.g. ab12cd34..." style="margin-bottom:0.5rem" />
+      <div class="label">Text to upload</div>
+      <textarea id="ul-text" rows="4" placeholder="Type or paste text here..."></textarea>
+      <div class="row" style="margin-top:0.5rem">
+        <button id="btn-upload">Upload</button>
+      </div>
+      <div class="output" id="ul-status"></div>
+    </section>
+
+    <!-- Download Object -->
+    <section>
+      <h2>Download Object</h2>
+      <div class="label">Indexer URL</div>
+      <input id="dl-url" type="text" placeholder="https://indexer.example.com" style="margin-bottom:0.5rem" />
+      <div class="label">App Key (64-byte hex keypair or 32-byte hex seed)</div>
+      <input id="dl-key" type="text" placeholder="e.g. ab12cd34..." style="margin-bottom:0.5rem" />
+      <div class="label">Object ID (hex)</div>
+      <div class="row">
+        <input id="dl-object-id" type="text" placeholder="e.g. 0e90d697f504..." />
+        <button id="btn-download">Download</button>
+      </div>
+      <div class="output" id="dl-status"></div>
+      <div class="label" style="margin-top:0.75rem">File contents</div>
+      <div class="output" id="dl-contents" style="min-height:6rem; max-height:24rem; overflow-y:auto;"></div>
+    </section>
+    <!-- Sign / Verify -->
+    <section>
+      <h2>Sign &amp; Verify</h2>
+      <div class="label">Message</div>
+      <input id="sign-message" type="text" placeholder="message to sign" />
+      <div class="row" style="margin-top:0.5rem">
+        <button id="btn-sign">Sign</button>
+        <button id="btn-verify">Verify</button>
+      </div>
+      <div class="output" id="sign-output"></div>
+    </section>
+  </div>
+
+  <script type="module">
+    import init, {
+      generateRecoveryPhrase,
+      validateRecoveryPhrase,
+      AppKey,
+      Builder,
+    } from './pkg/indexd_wasm.js';
+
+    let currentKey = null;
+    let lastSignature = null;
+
+    function hex(bytes) {
+      return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function randomHex(len) {
+      const arr = new Uint8Array(len);
+      crypto.getRandomValues(arr);
+      return hex(arr);
+    }
+
+    function fromHex(h) {
+      const bytes = new Uint8Array(h.length / 2);
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(h.substr(i * 2, 2), 16);
+      }
+      return bytes;
+    }
+
+    await init();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+
+    // -- Recovery Phrase --
+    document.getElementById('btn-generate').addEventListener('click', () => {
+      const phrase = generateRecoveryPhrase();
+      document.getElementById('phrase').value = phrase;
+      document.getElementById('phrase-output').innerHTML = '<span class="pass">Generated successfully</span>';
+    });
+
+    document.getElementById('btn-validate').addEventListener('click', () => {
+      const phrase = document.getElementById('phrase').value.trim();
+      const out = document.getElementById('phrase-output');
+      if (!phrase) {
+        out.innerHTML = '<span class="fail">Enter a phrase first</span>';
+        return;
+      }
+      try {
+        validateRecoveryPhrase(phrase);
+        out.innerHTML = '<span class="pass">Valid recovery phrase</span>';
+      } catch (e) {
+        out.innerHTML = `<span class="fail">Invalid: ${e.message}</span>`;
+      }
+    });
+
+    // -- Register --
+    let regBuilder = null;
+    let regAppId = null;
+
+    document.getElementById('btn-gen-curl').addEventListener('click', () => {
+      const curlDiv = document.getElementById('reg-curl');
+      const pasteSection = document.getElementById('reg-paste-section');
+      const status = document.getElementById('reg-status');
+      const approvalDiv = document.getElementById('reg-approval');
+      const finalizeDiv = document.getElementById('reg-finalize');
+      const resultDiv = document.getElementById('reg-result');
+      const url = document.getElementById('reg-url').value.trim();
+      const name = document.getElementById('reg-name').value.trim();
+      const desc = document.getElementById('reg-desc').value.trim();
+      const serviceUrl = document.getElementById('reg-service-url').value.trim();
+
+      status.style.display = 'none';
+      approvalDiv.style.display = 'none';
+      finalizeDiv.style.display = 'none';
+      resultDiv.style.display = 'none';
+
+      if (!url || !name || !desc || !serviceUrl) {
+        curlDiv.style.display = 'block';
+        curlDiv.innerHTML = '<span class="fail">All fields are required</span>';
+        return;
+      }
+
+      regAppId = randomHex(32);
+      const body = JSON.stringify({
+        appID: regAppId,
+        name: name,
+        description: desc,
+        serviceURL: serviceUrl,
+      });
+
+      const curlCmd = `curl -s -X POST ${url}/auth/connect -H 'Content-Type: application/json' -d '${body}'`;
+      curlDiv.style.display = 'block';
+      curlDiv.textContent = curlCmd;
+      pasteSection.style.display = 'block';
+
+      curlDiv.onclick = () => {
+        navigator.clipboard.writeText(curlCmd);
+        curlDiv.innerHTML = curlDiv.textContent + '\n<span class="pass">Copied!</span>';
+      };
+    });
+
+    document.getElementById('btn-set-response').addEventListener('click', () => {
+      const status = document.getElementById('reg-status');
+      const approvalDiv = document.getElementById('reg-approval');
+      const responseJson = document.getElementById('reg-response').value.trim();
+      const url = document.getElementById('reg-url').value.trim();
+
+      if (!responseJson) {
+        status.style.display = 'block';
+        status.innerHTML = '<span class="fail">Paste the JSON response first</span>';
+        return;
+      }
+
+      try {
+        // validate JSON parses
+        const parsed = JSON.parse(responseJson);
+        if (!parsed.responseURL || !parsed.statusURL || !parsed.registerURL) {
+          throw new Error('Response must contain responseURL, statusURL, and registerURL');
+        }
+
+        regBuilder = new Builder(url);
+        regBuilder.setConnectionResponse(regAppId, responseJson);
+
+        const responseUrl = regBuilder.responseUrl();
+        status.style.display = 'block';
+        status.innerHTML = `<span class="pass">Connection response accepted!</span>\n\nApprove this app by visiting:\n<a href="${responseUrl}" target="_blank" rel="noopener" style="color:#60a5fa; word-break:break-all;">${responseUrl}</a>`;
+        approvalDiv.style.display = 'block';
+      } catch (e) {
+        status.style.display = 'block';
+        status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    document.getElementById('btn-wait-approval').addEventListener('click', async () => {
+      const status = document.getElementById('reg-status');
+      const finalizeDiv = document.getElementById('reg-finalize');
+      const btn = document.getElementById('btn-wait-approval');
+
+      if (!regBuilder) {
+        status.innerHTML += `\n<span class="fail">Complete steps 1 and 2 first</span>`;
+        return;
+      }
+
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Waiting for approval...';
+        status.innerHTML += '\n\nPolling for approval (this may take a while)...';
+
+        await regBuilder.waitForApproval();
+
+        status.innerHTML += `\n<span class="pass">Approved!</span>`;
+        btn.textContent = 'Approved!';
+        finalizeDiv.style.display = 'block';
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '3. Wait for Approval';
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    document.getElementById('btn-reg-generate').addEventListener('click', () => {
+      document.getElementById('reg-mnemonic').value = generateRecoveryPhrase();
+    });
+
+    document.getElementById('btn-register').addEventListener('click', async () => {
+      const status = document.getElementById('reg-status');
+      const resultDiv = document.getElementById('reg-result');
+      const mnemonic = document.getElementById('reg-mnemonic').value.trim();
+
+      if (!regBuilder) {
+        status.innerHTML += `\n<span class="fail">Complete previous steps first</span>`;
+        return;
+      }
+      if (!mnemonic) {
+        status.innerHTML += `\n<span class="fail">Enter a recovery phrase</span>`;
+        return;
+      }
+
+      try {
+        status.innerHTML += '\nRegistering...';
+        const sdk = await regBuilder.register(mnemonic);
+        const appKey = sdk.appKey();
+        const seed = hex(appKey.export());
+        const pubkey = appKey.publicKey();
+
+        status.innerHTML += `\n<span class="pass">Registered successfully!</span>`;
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `<span class="pass">Registration complete!</span>\n\nApp Key Seed (use this in Upload/Download):\n${seed}\n\nPublic Key:\n${pubkey}\n\n<span style="color:#fbbf24;">Save your recovery phrase and app key seed securely!</span>`;
+        regBuilder = null;
+      } catch (e) {
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    // -- Upload Text --
+    document.getElementById('btn-upload').addEventListener('click', async () => {
+      const status = document.getElementById('ul-status');
+      const url = document.getElementById('ul-url').value.trim();
+      const keyHex = document.getElementById('ul-key').value.trim();
+      const text = document.getElementById('ul-text').value;
+
+      if (!url || !keyHex || !text) {
+        status.innerHTML = '<span class="fail">All three fields are required</span>';
+        return;
+      }
+
+      try {
+        status.textContent = 'Creating app key...';
+        const seed = fromHex(keyHex);
+        const appKey = new AppKey(seed);
+        status.textContent = `App key created. Public key: ${appKey.publicKey()}\nConnecting to indexer...`;
+
+        const builder = new Builder(url);
+        const sdk = await builder.connected(appKey);
+
+        if (!sdk) {
+          status.innerHTML = '<span class="fail">App key not recognized by this indexer. Register first.</span>';
+          return;
+        }
+
+        status.innerHTML = '<span class="pass">Connected!</span>\nUploading... <span style="color:#888">(check browser console for detailed progress)</span>';
+
+        const uploadStart = performance.now();
+        const data = new TextEncoder().encode(text);
+        const obj = await sdk.upload(data);
+        const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
+        const objectId = obj.id();
+        const size = obj.size();
+
+        status.innerHTML = `<span class="pass">Connected!</span>\nUpload complete (${size} bytes) in ${elapsed}s. Pinning to indexer...`;
+
+        await sdk.pinObject(obj);
+
+        status.innerHTML = `<span class="pass">Connected!</span>\nUpload complete (${size} bytes) in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
+      } catch (e) {
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    // -- Download Object --
+    document.getElementById('btn-download').addEventListener('click', async () => {
+      const status = document.getElementById('dl-status');
+      const contents = document.getElementById('dl-contents');
+      const url = document.getElementById('dl-url').value.trim();
+      const keyHex = document.getElementById('dl-key').value.trim();
+      const objectId = document.getElementById('dl-object-id').value.trim();
+
+      contents.textContent = '';
+
+      if (!url || !keyHex || !objectId) {
+        status.innerHTML = '<span class="fail">All three fields are required</span>';
+        return;
+      }
+
+      try {
+        status.textContent = 'Creating app key...';
+        const seed = fromHex(keyHex);
+        const appKey = new AppKey(seed);
+        status.textContent = `App key created. Public key: ${appKey.publicKey()}\nConnecting to indexer...`;
+
+        const builder = new Builder(url);
+        const sdk = await builder.connected(appKey);
+
+        if (!sdk) {
+          status.innerHTML = '<span class="fail">App key not recognized by this indexer. Register first.</span>';
+          return;
+        }
+
+        status.innerHTML = '<span class="pass">Connected!</span>\nFetching object metadata...';
+
+        const obj = await sdk.object(objectId);
+        const size = obj.size();
+        status.innerHTML = `<span class="pass">Connected!</span>\nObject found: ${size} bytes\nDownloading...`;
+
+        const data = await sdk.download(obj);
+        const text = new TextDecoder('utf-8', { fatal: false }).decode(data);
+
+        status.innerHTML = `<span class="pass">Connected!</span>\nObject: ${objectId}\nSize: ${size} bytes\n<span class="pass">Download complete!</span>`;
+        contents.textContent = text;
+      } catch (e) {
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    // -- Sign / Verify --
+    document.getElementById('btn-sign').addEventListener('click', () => {
+      const out = document.getElementById('sign-output');
+      const msg = document.getElementById('sign-message').value;
+      if (!currentKey) {
+        out.innerHTML = '<span class="fail">Create an AppKey first</span>';
+        return;
+      }
+      const msgBytes = new TextEncoder().encode(msg);
+      lastSignature = currentKey.sign(msgBytes);
+      out.textContent = `Signature (${lastSignature.length} bytes):\n${hex(lastSignature)}`;
+    });
+
+    document.getElementById('btn-verify').addEventListener('click', () => {
+      const out = document.getElementById('sign-output');
+      if (!currentKey || !lastSignature) {
+        out.innerHTML = '<span class="fail">Sign a message first</span>';
+        return;
+      }
+      const msg = document.getElementById('sign-message').value;
+      const msgBytes = new TextEncoder().encode(msg);
+      try {
+        const valid = currentKey.verifySignature(msgBytes, lastSignature);
+        if (valid) {
+          out.innerHTML += `\n\n<span class="pass">Signature is valid</span>`;
+        } else {
+          out.innerHTML += `\n\n<span class="fail">Signature is INVALID</span>`;
+        }
+      } catch (e) {
+        out.innerHTML += `\n\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+  </script>
+</body>
+</html>
