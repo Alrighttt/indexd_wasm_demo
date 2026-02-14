@@ -288,12 +288,12 @@ export function validateRecoveryPhrase(phrase) {
     }
 }
 
-function wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1) {
-    wasm.wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1);
-}
-
 function wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2) {
     wasm.wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2);
+}
+
+function wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1) {
+    wasm.wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1);
 }
 
 function wasm_bindgen__convert__closures_____invoke__h0015dda4019b602e(arg0, arg1, arg2, arg3) {
@@ -744,6 +744,19 @@ export class SDK {
         const ptr0 = passStringToWasm0(share_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.sdk_sharedObject(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Downloads an object with streaming chunks.
+     * Fires `on_chunk(bytes)` after each slab is decoded and `on_progress(current, total)` for progress.
+     * @param {PinnedObject} object
+     * @param {Function} on_chunk
+     * @param {Function} on_progress
+     * @returns {Promise<void>}
+     */
+    downloadStreaming(object, on_chunk, on_progress) {
+        _assertClass(object, PinnedObject);
+        const ret = wasm.sdk_downloadStreaming(this.__wbg_ptr, object.__wbg_ptr, on_chunk, on_progress);
         return ret;
     }
     /**
@@ -1326,24 +1339,24 @@ function __wbg_get_imports() {
         const ret = getStringFromWasm0(arg0, arg1);
         return ret;
     };
-    imports.wbg.__wbindgen_cast_317cf9338e91f114 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 555, function: Function { arguments: [Externref], shim_idx: 556, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
-        return ret;
-    };
     imports.wbg.__wbindgen_cast_4625c577ab2ec9ee = function(arg0) {
         // Cast intrinsic for `U64 -> Externref`.
         const ret = BigInt.asUintN(64, arg0);
         return ret;
     };
-    imports.wbg.__wbindgen_cast_8130b20f58bba0f7 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 528, function: Function { arguments: [], shim_idx: 529, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+    imports.wbg.__wbindgen_cast_4e0b332d10dc3861 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 540, function: Function { arguments: [], shim_idx: 541, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
         const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
         return ret;
     };
     imports.wbg.__wbindgen_cast_9ae0607507abb057 = function(arg0) {
         // Cast intrinsic for `I64 -> Externref`.
         const ret = arg0;
+        return ret;
+    };
+    imports.wbg.__wbindgen_cast_abf07b337122c46a = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 567, function: Function { arguments: [Externref], shim_idx: 568, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
         return ret;
     };
     imports.wbg.__wbindgen_cast_cb9088102bce6b30 = function(arg0, arg1) {

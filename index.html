@@ -178,6 +178,21 @@
       <div class="output" id="share-dl-status"></div>
     </section>
 
+    <!-- Stream HTML Page -->
+    <section>
+      <h2>Stream HTML Page</h2>
+      <div class="label">Object ID</div>
+      <input id="stream-object-id" type="text" placeholder="hex object id" />
+      <div class="label" style="margin-top:0.75rem">OR Share URL</div>
+      <input id="stream-share-url" type="text" placeholder="sia:// or https:// share URL" />
+      <div class="row" style="margin-top:0.5rem">
+        <button id="btn-stream-html">Stream to iFrame</button>
+      </div>
+      <progress id="stream-progress" max="100" value="0" style="display:none"></progress>
+      <div class="output" id="stream-status"></div>
+      <iframe id="stream-iframe" sandbox="allow-same-origin" style="display:none; width:100%; height:400px; border:1px solid #333; border-radius:4px; margin-top:1rem;"></iframe>
+    </section>
+
     <!-- Sign / Verify -->
     <section>
       <h2>Sign &amp; Verify</h2>
@@ -714,6 +729,64 @@
 
         progress.value = progress.max;
         status.innerHTML = `File: ${filename}\nSize: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Saved to disk!</span>`;
+      } catch (e) {
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    // -- Stream HTML Page --
+    document.getElementById('btn-stream-html').addEventListener('click', async () => {
+      const status = document.getElementById('stream-status');
+      const progress = document.getElementById('stream-progress');
+      const iframe = document.getElementById('stream-iframe');
+      const objectId = document.getElementById('stream-object-id').value.trim();
+      const shareUrl = document.getElementById('stream-share-url').value.trim();
+
+      progress.style.display = 'none';
+      progress.value = 0;
+      iframe.style.display = 'none';
+
+      if (!objectId && !shareUrl) {
+        status.innerHTML = '<span class="fail">Enter an Object ID or Share URL</span>';
+        return;
+      }
+
+      try {
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
+
+        status.textContent = 'Fetching object metadata...';
+        const obj = shareUrl
+          ? await sdk.sharedObject(shareUrl)
+          : await sdk.object(objectId);
+        const size = obj.size();
+        status.innerHTML = `Object found: ${formatSize(size)}`;
+
+        progress.style.display = 'block';
+        iframe.style.display = 'block';
+        status.textContent = 'Streaming...';
+
+        const chunks = [];
+        const streamStart = performance.now();
+
+        await sdk.downloadStreaming(obj,
+          (chunk) => {
+            // on_chunk: fired after each slab is decoded
+            chunks.push(chunk);
+            const blob = new Blob(chunks, { type: 'text/html' });
+            iframe.src = URL.createObjectURL(blob);
+          },
+          (current, total) => {
+            // on_progress
+            progress.max = total;
+            progress.value = current;
+            status.textContent = `Streaming... ${current}/${total} slabs`;
+          }
+        );
+
+        const elapsed = ((performance.now() - streamStart) / 1000).toFixed(1);
+        progress.value = progress.max;
+        status.innerHTML = `Size: ${formatSize(size)}\nStreamed in ${elapsed}s\n<span class="pass">HTML rendered below!</span>`;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
