@@ -235,32 +235,6 @@ function _assertClass(instance, klass) {
     }
 }
 /**
- * Generates a new 12-word BIP-32 recovery phrase.
- * @returns {string}
- */
-export function generateRecoveryPhrase() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-        const ret = wasm.generateRecoveryPhrase();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-    }
-}
-
-/**
- * Install a panic hook and logging bridge so that Rust panics show a proper
- * stack trace and `log::debug!()` / `log::info!()` etc. appear in the browser
- * console.
- */
-export function init_panic_hook() {
-    wasm.init_panic_hook();
-}
-
-/**
  * Connects to a host via WebTransport and fetches its settings/prices.
  *
  * `address` should be a host address like `host.example.com:9883`.
@@ -276,6 +250,15 @@ export function fetchHostSettings(address) {
 }
 
 /**
+ * Install a panic hook and logging bridge so that Rust panics show a proper
+ * stack trace and `log::debug!()` / `log::info!()` etc. appear in the browser
+ * console.
+ */
+export function init_panic_hook() {
+    wasm.init_panic_hook();
+}
+
+/**
  * Validates a BIP-32 recovery phrase.
  * @param {string} phrase
  */
@@ -285,6 +268,23 @@ export function validateRecoveryPhrase(phrase) {
     const ret = wasm.validateRecoveryPhrase(ptr0, len0);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * Generates a new 12-word BIP-32 recovery phrase.
+ * @returns {string}
+ */
+export function generateRecoveryPhrase() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.generateRecoveryPhrase();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
 }
 
@@ -554,7 +554,7 @@ export class Builder {
      * Returns the SDK if authenticated, or null if the key is not recognized.
      * Call `requestConnection` if null is returned.
      * @param {AppKey} app_key
-     * @returns {Promise<any>}
+     * @returns {Promise<SDK>}
      */
     connected(app_key) {
         _assertClass(app_key, AppKey);
@@ -757,6 +757,22 @@ export class SDK {
         }
     }
     /**
+     * Adds a chunk to an existing upload session.
+     * Returns the current offset after adding this chunk.
+     * @param {number} session_id
+     * @param {Uint8Array} chunk
+     * @returns {number}
+     */
+    uploadChunk(session_id, chunk) {
+        const ptr0 = passArray8ToWasm0(chunk, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.sdk_uploadChunk(this.__wbg_ptr, session_id, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0];
+    }
+    /**
      * Deletes an object from the indexer by its hex-encoded key.
      * @param {string} key
      * @returns {Promise<void>}
@@ -780,6 +796,48 @@ export class SDK {
         return ret;
     }
     /**
+     * Starts a streaming upload that reads chunks on-demand from JavaScript.
+     * This bypasses WASM memory limitations by never accumulating the entire file.
+     *
+     * Returns a StreamingUpload object with a `pushChunk` method and a `promise` property.
+     * JavaScript should:
+     * 1. Start pushing chunks immediately using `pushChunk(chunk)`
+     * 2. Call `pushChunk(null)` to signal EOF when all chunks are sent
+     * 3. `await upload.promise` to get the uploaded object
+     *
+     * # Example JavaScript Usage
+     * ```javascript
+     * const totalSize = file.size;
+     * const upload = sdk.streamingUpload(totalSize, (current, total) => {
+     *   console.log(`Progress: ${current}/${total} shards`);
+     * });
+     *
+     * // Read and push chunks asynchronously
+     * (async () => {
+     *   const CHUNK_SIZE = 128 * 1024 * 1024; // 128 MB
+     *   for (let offset = 0; offset < totalSize; offset += CHUNK_SIZE) {
+     *     const chunk = file.slice(offset, offset + CHUNK_SIZE);
+     *     const data = new Uint8Array(await chunk.arrayBuffer());
+     *     upload.pushChunk(data);
+     *   }
+     *   upload.pushChunk(null); // Signal EOF
+     * })();
+     *
+     * // Wait for upload to complete
+     * const obj = await upload.promise;
+     * ```
+     * @param {number} total_size
+     * @param {Function} on_progress
+     * @returns {StreamingUpload}
+     */
+    streamingUpload(total_size, on_progress) {
+        const ret = wasm.sdk_streamingUpload(this.__wbg_ptr, total_size, on_progress);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return StreamingUpload.__wrap(ret[0]);
+    }
+    /**
      * Downloads an object with streaming chunks.
      * Fires `on_chunk(bytes)` after each slab is decoded and `on_progress(current, total)` for progress.
      * @param {PinnedObject} object
@@ -791,6 +849,21 @@ export class SDK {
         _assertClass(object, PinnedObject);
         const ret = wasm.sdk_downloadStreaming(this.__wbg_ptr, object.__wbg_ptr, on_chunk, on_progress);
         return ret;
+    }
+    /**
+     * Starts a new chunked upload session with the total file size.
+     * Returns a session ID (as a number) to track this upload.
+     *
+     * Note: Due to WASM 32-bit limitations, maximum file size is approximately 1.5 GB.
+     * @param {number} total_size
+     * @returns {number}
+     */
+    startChunkedUpload(total_size) {
+        const ret = wasm.sdk_startChunkedUpload(this.__wbg_ptr, total_size);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0];
     }
     /**
      * Uploads a Uint8Array with per-shard progress reporting.
@@ -827,6 +900,17 @@ export class SDK {
     updateObjectMetadata(object) {
         _assertClass(object, PinnedObject);
         const ret = wasm.sdk_updateObjectMetadata(this.__wbg_ptr, object.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Finalizes a chunked upload and returns the PinnedObject.
+     * on_progress callback receives (current_shards, total_shards).
+     * @param {number} session_id
+     * @param {Function} on_progress
+     * @returns {Promise<PinnedObject>}
+     */
+    finalizeChunkedUpload(session_id, on_progress) {
+        const ret = wasm.sdk_finalizeChunkedUpload(this.__wbg_ptr, session_id, on_progress);
         return ret;
     }
     /**
@@ -889,6 +973,75 @@ export class SDK {
     }
 }
 if (Symbol.dispose) SDK.prototype[Symbol.dispose] = SDK.prototype.free;
+
+const StreamingUploadFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_streamingupload_free(ptr >>> 0, 1));
+/**
+ * Handle for a streaming upload operation.
+ * JavaScript should call `pushChunk(data)` for each chunk, then `pushChunk(null)` to signal EOF.
+ * The `promise` resolves to a PinnedObject when the upload completes.
+ */
+export class StreamingUpload {
+
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(StreamingUpload.prototype);
+        obj.__wbg_ptr = ptr;
+        StreamingUploadFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        StreamingUploadFinalization.unregister(this);
+        return ptr;
+    }
+
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_streamingupload_free(ptr, 0);
+    }
+    /**
+     * Pushes a chunk of data to the upload.
+     * Pass data as Uint8Array. Call with `null` or `undefined` to signal EOF.
+     *
+     * **Backpressure**: This method applies backpressure to prevent memory exhaustion.
+     * It returns a Promise that resolves when the chunk has been queued.
+     * If the queue is full, it waits until space becomes available.
+     *
+     * **IMPORTANT**: JavaScript MUST await this Promise before pushing the next chunk:
+     * ```javascript
+     * await upload.pushChunk(data);  // ← await here!
+     * ```
+     * @param {Uint8Array | null} [chunk]
+     * @returns {Promise<any>}
+     */
+    pushChunk(chunk) {
+        var ptr0 = isLikeNone(chunk) ? 0 : passArray8ToWasm0(chunk, wasm.__wbindgen_malloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.streamingupload_pushChunk(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Returns the promise that resolves when the upload completes
+     * @returns {Promise<any>}
+     */
+    get promise() {
+        const ret = wasm.streamingupload_promise(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Returns the reader ID for this upload session (mainly for debugging)
+     * @returns {number}
+     */
+    get getReaderId() {
+        const ret = wasm.streamingupload_getReaderId(this.__wbg_ptr);
+        return ret;
+    }
+}
+if (Symbol.dispose) StreamingUpload.prototype[Symbol.dispose] = StreamingUpload.prototype.free;
 
 const EXPECTED_RESPONSE_TYPES = new Set(['basic', 'cors', 'default']);
 
@@ -1109,6 +1262,16 @@ function __wbg_get_imports() {
         const ret = result;
         return ret;
     };
+    imports.wbg.__wbg_instanceof_Window_4846dbb3de56c84c = function(arg0) {
+        let result;
+        try {
+            result = arg0 instanceof Window;
+        } catch (_) {
+            result = false;
+        }
+        const ret = result;
+        return ret;
+    };
     imports.wbg.__wbg_iterator_e5822695327a3c39 = function() {
         const ret = Symbol.iterator;
         return ret;
@@ -1259,6 +1422,10 @@ function __wbg_get_imports() {
         const ret = setTimeout(arg0, arg1);
         return ret;
     };
+    imports.wbg.__wbg_setTimeout_780ac15e3df4c663 = function() { return handleError(function (arg0, arg1, arg2) {
+        const ret = arg0.setTimeout(arg1, arg2);
+        return ret;
+    }, arguments) };
     imports.wbg.__wbg_set_3f1d0b984ed272ed = function(arg0, arg1, arg2) {
         arg0[arg1] = arg2;
     };
@@ -1377,9 +1544,9 @@ function __wbg_get_imports() {
         const ret = BigInt.asUintN(64, arg0);
         return ret;
     };
-    imports.wbg.__wbindgen_cast_4e0b332d10dc3861 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 540, function: Function { arguments: [], shim_idx: 541, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
+    imports.wbg.__wbindgen_cast_8a66a19655b99ba1 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 620, function: Function { arguments: [Externref], shim_idx: 621, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
         return ret;
     };
     imports.wbg.__wbindgen_cast_9ae0607507abb057 = function(arg0) {
@@ -1387,14 +1554,14 @@ function __wbg_get_imports() {
         const ret = arg0;
         return ret;
     };
-    imports.wbg.__wbindgen_cast_abf07b337122c46a = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 567, function: Function { arguments: [Externref], shim_idx: 568, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
-        return ret;
-    };
     imports.wbg.__wbindgen_cast_cb9088102bce6b30 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
         const ret = getArrayU8FromWasm0(arg0, arg1);
+        return ret;
+    };
+    imports.wbg.__wbindgen_cast_d0fab1a2c5f343b5 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 593, function: Function { arguments: [], shim_idx: 594, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
         return ret;
     };
     imports.wbg.__wbindgen_cast_d6cd19b81560fd6e = function(arg0) {

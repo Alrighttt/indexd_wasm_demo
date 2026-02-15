@@ -274,6 +274,35 @@
       return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
     }
 
+    // Streaming download helper — avoids holding the entire file in WASM memory.
+    // Returns { blob, elapsed } where blob is assembled from streamed chunks.
+    async function streamingDownload(sdk, obj, status, progress, label) {
+      progress.style.display = 'block';
+      status.textContent = label || 'Downloading...';
+
+      const downloadStart = performance.now();
+      let lastProgressUpdate = 0;
+      const PROGRESS_THROTTLE_MS = 100;
+
+      const blobParts = [];
+      await sdk.downloadStreaming(obj,
+        (chunk) => { blobParts.push(chunk); },
+        (current, total) => {
+          const now = performance.now();
+          if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
+            progress.max = total;
+            progress.value = current;
+            status.textContent = `${label || 'Downloading'}... ${current}/${total} slabs`;
+            lastProgressUpdate = now;
+          }
+        },
+      );
+
+      const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+      progress.value = progress.max;
+      return { blob: new Blob(blobParts), elapsed };
+    }
+
     // Auto-restore config from localStorage on page load
     const urlInput = document.getElementById('cfg-url');
     const keyInput = document.getElementById('cfg-key');
@@ -639,15 +668,9 @@
     document.getElementById('btn-upload-file').addEventListener('click', async () => {
       const status = document.getElementById('uf-status');
       const progress = document.getElementById('uf-progress');
-      const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2 GB - wasm32 memory limit
 
       if (!selectedFile) {
         status.innerHTML = '<span class="fail">Select a file first</span>';
-        return;
-      }
-
-      if (selectedFile.size > MAX_FILE_SIZE) {
-        status.innerHTML = `<span class="fail">File too large (${formatSize(selectedFile.size)}). Maximum is 2 GB due to WASM memory limits.</span>`;
         return;
       }
 
@@ -658,20 +681,85 @@
         const sdk = await connectSdk(status);
         if (!sdk) return;
 
-        status.innerHTML += '\nReading file...';
+        const fileSize = selectedFile.size;
+        const STREAMING_THRESHOLD = 1.5 * 1024 * 1024 * 1024; // 1.5 GB
+        const useStreaming = fileSize > STREAMING_THRESHOLD;
 
-        const buffer = await selectedFile.arrayBuffer();
-        const data = new Uint8Array(buffer);
+        status.innerHTML = `Uploading ${selectedFile.name} (${formatSize(fileSize)})...\n`;
+        if (useStreaming) {
+          status.innerHTML += '<span style="color:#60a5fa">Using streaming mode (no memory accumulation)</span>\n';
+        }
 
-        progress.style.display = 'block';
-        status.textContent = `Uploading ${selectedFile.name} (${formatSize(data.length)})...`;
-
+        const CHUNK_SIZE = 128 * 1024 * 1024; // 128 MB chunks
+        const totalChunks = Math.ceil(fileSize / CHUNK_SIZE);
         const uploadStart = performance.now();
-        const obj = await sdk.uploadWithProgress(data, (current, total) => {
-          progress.max = total;
-          progress.value = current;
-          status.textContent = `Uploading ${selectedFile.name}... ${current}/${total} shards`;
-        });
+        let obj;
+
+        if (useStreaming) {
+          // === STREAMING UPLOAD (for files > 1.5GB) ===
+          // This mode reads chunks and uploads them concurrently without accumulating in memory
+
+          status.innerHTML += 'Initializing streaming upload...\n';
+          progress.style.display = 'block';
+
+          const upload = sdk.streamingUpload(fileSize, (current, total) => {
+            progress.max = total;
+            progress.value = current;
+            status.textContent = `Uploading ${selectedFile.name}... ${current}/${total} shards`;
+          });
+
+          // Start reading and pushing chunks asynchronously
+          (async () => {
+            try {
+              for (let i = 0; i < totalChunks; i++) {
+                const start = i * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, fileSize);
+                const chunk = selectedFile.slice(start, end);
+                const buffer = await chunk.arrayBuffer();
+                const data = new Uint8Array(buffer);
+
+                await upload.pushChunk(data);  // ← CRITICAL: await for backpressure!
+                console.log(`📤 Pushed chunk ${i + 1}/${totalChunks} (${formatSize(end)})`);
+              }
+              await upload.pushChunk(null); // Signal EOF
+              console.log('✓ All chunks pushed, waiting for upload to complete');
+            } catch (e) {
+              console.error('Error pushing chunks:', e);
+              status.innerHTML += `\n<span class="fail">Error reading file: ${e.message}</span>`;
+            }
+          })();
+
+          // Wait for upload to complete
+          obj = await upload.promise;
+        } else {
+          // === CHUNKED UPLOAD (for files ≤ 1.5GB) ===
+          // This mode accumulates the file in WASM memory before uploading
+
+          status.innerHTML += `Reading file in ${totalChunks} chunk(s)...\n`;
+
+          const sessionId = sdk.startChunkedUpload(fileSize);
+
+          for (let i = 0; i < totalChunks; i++) {
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, fileSize);
+            const chunk = selectedFile.slice(start, end);
+            const buffer = await chunk.arrayBuffer();
+            const data = new Uint8Array(buffer);
+
+            const currentOffset = sdk.uploadChunk(sessionId, data);
+            status.textContent = `Reading file... ${i + 1}/${totalChunks} chunks (${formatSize(currentOffset)})`;
+          }
+
+          status.innerHTML += '\nUploading to Sia network...\n';
+          progress.style.display = 'block';
+
+          obj = await sdk.finalizeChunkedUpload(sessionId, (current, total) => {
+            progress.max = total;
+            progress.value = current;
+            status.textContent = `Uploading ${selectedFile.name}... ${current}/${total} shards`;
+          });
+        }
+
         const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
         const objectId = obj.id();
         const size = obj.size();
@@ -722,26 +810,74 @@
         let lastProgressUpdate = 0;
         const PROGRESS_THROTTLE_MS = 100;
 
-        const data = await sdk.downloadWithProgress(obj, (current, total) => {
+        const progressCb = (current, total) => {
           const now = performance.now();
           if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
             progress.max = total;
             progress.value = current;
             status.textContent = `Downloading... ${current}/${total} slabs`;
             lastProgressUpdate = now;
-            console.log(`Download progress: ${current}/${total}`);
           }
-        });
+        };
+
+        // Use the File System Access API to stream directly to disk when
+        // available (Chrome/Edge). Chunks are batched per slab (~40 MB) and
+        // written as a single Blob so memory stays bounded to ~1-2 slabs.
+        if (window.showSaveFilePicker) {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: filename,
+          });
+          const writable = await handle.createWritable();
+          try {
+            // Accumulate chunks for the current slab; flush on progress
+            let slabChunks = [];
+            let lastWrite = Promise.resolve();
+
+            await sdk.downloadStreaming(obj,
+              (chunk) => {
+                // chunk is already a JS-owned copy from Rust — no extra copy needed
+                slabChunks.push(chunk);
+              },
+              (current, total) => {
+                // Flush accumulated chunks to disk as one Blob per slab
+                if (slabChunks.length > 0) {
+                  const blob = new Blob(slabChunks);
+                  slabChunks = [];
+                  // Chain writes so they execute in order; the bounded queue
+                  // means at most a few slabs of data are held in memory.
+                  lastWrite = lastWrite.then(() => writable.write(blob));
+                }
+                progressCb(current, total);
+              },
+            );
+            // Flush any remaining buffered data
+            if (slabChunks.length > 0) {
+              const blob = new Blob(slabChunks);
+              slabChunks = [];
+              lastWrite = lastWrite.then(() => writable.write(blob));
+            }
+            await lastWrite;
+            await writable.close();
+          } catch (e) {
+            await writable.abort();
+            throw e;
+          }
+        } else {
+          // Fallback: accumulate in memory (works everywhere, but limited by RAM)
+          const blobParts = [];
+          await sdk.downloadStreaming(obj,
+            (chunk) => { blobParts.push(chunk); },
+            progressCb,
+          );
+          const blob = new Blob(blobParts);
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        }
+
         const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
-
-        // trigger browser save dialog
-        const blob = new Blob([data]);
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(a.href);
-
         progress.value = progress.max;
         status.innerHTML = `File: ${filename}\nSize: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Saved to disk!</span>`;
       } catch (e) {
@@ -898,14 +1034,8 @@
           ? await sdk.sharedObject(item.originalUrl)
           : await sdk.object(item.originalUrl);
 
-        progress.style.display = 'block';
-        const data = await sdk.downloadWithProgress(obj, (current, total) => {
-          progress.max = total;
-          progress.value = current;
-          status.textContent = `Downloading... ${current}/${total} slabs`;
-        });
-
-        progress.value = progress.max;
+        const { blob: downloadedBlob } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
+        const data = new Uint8Array(await downloadedBlob.arrayBuffer());
 
         // Create blob with appropriate MIME type and wrapper
         let mimeType = 'text/html';
@@ -1024,28 +1154,9 @@
             : await sdk.object(url);
           const size = obj.size();
 
-          progress.style.display = 'block';
-          status.textContent = 'Downloading...';
-
-          const downloadStart = performance.now();
-          let lastProgressUpdate = 0;
-          const PROGRESS_THROTTLE_MS = 100;
-
-          const data = await sdk.downloadWithProgress(obj, (current, total) => {
-            const now = performance.now();
-            if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
-              progress.max = total;
-              progress.value = current;
-              status.textContent = `Downloading... ${current}/${total} slabs`;
-              lastProgressUpdate = now;
-            }
-          });
-
-          const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
-          progress.value = progress.max;
+          const { blob, elapsed } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
 
           // Load into iframe (let browser detect content type)
-          const blob = new Blob([data]);
           const blobUrl = URL.createObjectURL(blob);
           iframe.src = blobUrl;
 
@@ -1088,46 +1199,27 @@
           : await sdk.object(url);
         const size = obj.size();
 
-        progress.style.display = 'block';
-        status.textContent = 'Downloading...';
-
-        const downloadStart = performance.now();
-        let lastProgressUpdate = 0;
-        const PROGRESS_THROTTLE_MS = 100;
-
-        const data = await sdk.downloadWithProgress(obj, (current, total) => {
-          const now = performance.now();
-          if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
-            progress.max = total;
-            progress.value = current;
-            status.textContent = `Downloading... ${current}/${total} slabs`;
-            lastProgressUpdate = now;
-          }
-        });
-
-        const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
-        progress.value = progress.max;
+        const { blob: downloadedBlob, elapsed } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
 
         // Create blob with appropriate wrapper for better display
         let blobUrl;
         if (mimeType === 'text/plain') {
           // Wrap text in styled HTML for better readability
-          const text = new TextDecoder().decode(data);
+          const text = new TextDecoder().decode(new Uint8Array(await downloadedBlob.arrayBuffer()));
           const escapedText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:'Courier New',monospace;padding:1.5rem;background:#0a0a0a;color:#e0e0e0;margin:0;}pre{white-space:pre-wrap;word-wrap:break-word;margin:0;line-height:1.5;}</style></head><body><pre>${escapedText}</pre></body></html>`;
           const blob = new Blob([html], { type: 'text/html' });
           blobUrl = URL.createObjectURL(blob);
         } else if (mimeType === 'audio/mpeg') {
           // Wrap audio in HTML with styled player
-          const audioBlob = new Blob([data], { type: mimeType });
+          const audioBlob = new Blob([downloadedBlob], { type: mimeType });
           const audioUrl = URL.createObjectURL(audioBlob);
           const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0;font-family:system-ui,sans-serif;}audio{width:90%;max-width:600px;}</style></head><body><h2 style="margin-bottom:2rem;">🎵 Audio Player</h2><audio controls autoplay><source src="${audioUrl}" type="${mimeType}">Your browser does not support the audio element.</audio></body></html>`;
           const blob = new Blob([html], { type: 'text/html' });
           blobUrl = URL.createObjectURL(blob);
         } else {
           // For other types (image, video, html), load directly
-          const blob = new Blob([data], { type: mimeType });
-          blobUrl = URL.createObjectURL(blob);
+          blobUrl = URL.createObjectURL(new Blob([downloadedBlob], { type: mimeType }));
         }
 
         iframe.src = blobUrl;
@@ -1170,28 +1262,10 @@
           : await sdk.object(url);
         const size = obj.size();
 
-        progress.style.display = 'block';
-        status.textContent = 'Downloading...';
-
-        const downloadStart = performance.now();
-        let lastProgressUpdate = 0;
-        const PROGRESS_THROTTLE_MS = 100;
-
-        const data = await sdk.downloadWithProgress(obj, (current, total) => {
-          const now = performance.now();
-          if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
-            progress.max = total;
-            progress.value = current;
-            status.textContent = `Downloading PDF... ${current}/${total} slabs`;
-            lastProgressUpdate = now;
-          }
-        });
-
-        const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
-        progress.value = progress.max;
+        const { blob: downloadedBlob, elapsed } = await streamingDownload(sdk, obj, status, progress, 'Downloading PDF');
 
         // Open PDF in new tab
-        const blob = new Blob([data], { type: 'application/pdf' });
+        const blob = new Blob([downloadedBlob], { type: 'application/pdf' });
         const blobUrl = URL.createObjectURL(blob);
         window.open(blobUrl, '_blank');
 
@@ -1246,17 +1320,10 @@
           ? await sdk.sharedObject(url)
           : await sdk.object(url);
 
-        progress.style.display = 'block';
-        const data = await sdk.downloadWithProgress(obj, (current, total) => {
-          progress.max = total;
-          progress.value = current;
-          status.textContent = `Downloading... ${current}/${total} slabs`;
-        });
-
-        progress.value = progress.max;
+        const { blob: downloadedBlob } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
 
         // Open in external tab with HTML content type
-        const blob = new Blob([data], { type: 'text/html' });
+        const blob = new Blob([downloadedBlob], { type: 'text/html' });
         const blobUrl = URL.createObjectURL(blob);
         window.open(blobUrl, '_blank');
 
@@ -1293,28 +1360,9 @@
           const obj = await sdk.sharedObject(url);
           const size = obj.size();
 
-          progress.style.display = 'block';
-          status.textContent = 'Downloading...';
-
-          const downloadStart = performance.now();
-          let lastProgressUpdate = 0;
-          const PROGRESS_THROTTLE_MS = 100;
-
-          const data = await sdk.downloadWithProgress(obj, (current, total) => {
-            const now = performance.now();
-            if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
-              progress.max = total;
-              progress.value = current;
-              status.textContent = `Downloading... ${current}/${total} slabs`;
-              lastProgressUpdate = now;
-            }
-          });
-
-          const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
-          progress.value = progress.max;
+          const { blob, elapsed } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
 
           // Load into iframe (let browser detect content type)
-          const blob = new Blob([data]);
           const blobUrl = URL.createObjectURL(blob);
           iframe.src = blobUrl;
 
@@ -1342,28 +1390,9 @@
           const obj = await sdk.sharedObject(url);
           const size = obj.size();
 
-          progress.style.display = 'block';
-          status.textContent = 'Downloading...';
-
-          const downloadStart = performance.now();
-          let lastProgressUpdate = 0;
-          const PROGRESS_THROTTLE_MS = 100;
-
-          const data = await sdk.downloadWithProgress(obj, (current, total) => {
-            const now = performance.now();
-            if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
-              progress.max = total;
-              progress.value = current;
-              status.textContent = `Downloading... ${current}/${total} slabs`;
-              lastProgressUpdate = now;
-            }
-          });
-
-          const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
-          progress.value = progress.max;
+          const { blob, elapsed } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
 
           // Open in new tab (let browser detect content type)
-          const blob = new Blob([data]);
           const blobUrl = URL.createObjectURL(blob);
           window.open(blobUrl, '_blank');
 
