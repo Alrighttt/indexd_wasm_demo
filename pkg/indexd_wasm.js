@@ -441,6 +441,17 @@ export class Builder {
         }
     }
     /**
+     * Sets the maximum number of concurrent uploads (default: 3).
+     * Lower values = more stable, higher values = faster but may crash browser.
+     * @param {number} max
+     */
+    withMaxUploads(max) {
+        const ret = wasm.builder_withMaxUploads(this.__wbg_ptr, max);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
      * Polls for approval. Resolves when the user approves.
      * @returns {Promise<void>}
      */
@@ -468,6 +479,28 @@ export class Builder {
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.builder_requestConnection(this.__wbg_ptr, ptr0, len0);
         return ret;
+    }
+    /**
+     * Sets the maximum number of concurrent downloads (default: 2).
+     * Lower values = more stable, higher values = faster but may crash browser.
+     * @param {number} max
+     */
+    withMaxDownloads(max) {
+        const ret = wasm.builder_withMaxDownloads(this.__wbg_ptr, max);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * Sets the maximum number of concurrent price fetches (default: 1).
+     * Lower values = more stable, higher values = faster but may crash browser.
+     * @param {number} max
+     */
+    withMaxPriceFetches(max) {
+        const ret = wasm.builder_withMaxPriceFetches(this.__wbg_ptr, max);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
     }
     /**
      * Transitions the builder using a pre-fetched connection response.
