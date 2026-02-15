@@ -30,6 +30,20 @@
     progress::-webkit-progress-bar { background: #1a1a1a; border-radius: 4px; }
     progress::-webkit-progress-value { background: #1a6b3c; border-radius: 4px; }
     progress::-moz-progress-bar { background: #1a6b3c; border-radius: 4px; }
+
+    /* Browser Navigation Controls */
+    .browser-nav { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem; padding: 0.5rem; background: #0d0d0d; border: 1px solid #222; border-radius: 4px; }
+    .browser-nav-row { display: flex; gap: 0.5rem; align-items: center; }
+    .browser-nav button { padding: 0.4rem 0.75rem; font-size: 0.8rem; min-width: auto; }
+    .browser-nav .address-bar { flex: 1; background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 0.4rem 0.6rem; font-family: monospace; font-size: 0.75rem; color: #ddd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .browser-nav .address-bar:focus { outline: none; border-color: #667eea; background: #222; }
+    .browser-container { display: flex; gap: 1rem; margin-top: 1rem; }
+    .browser-main { flex: 1; min-width: 0; }
+    .browser-history { width: 200px; background: #0d0d0d; border: 1px solid #222; border-radius: 4px; padding: 0.75rem; max-height: 600px; overflow-y: auto; }
+    .browser-history h3 { font-size: 0.85rem; color: #b0b0b0; margin-bottom: 0.5rem; }
+    .history-item { font-size: 0.75rem; padding: 0.4rem; margin-bottom: 0.25rem; background: #151515; border: 1px solid #2a2a2a; border-radius: 4px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: background 0.2s; }
+    .history-item:hover { background: #1a1a1a; }
+    .history-item.active { background: #1a6b3c; border-color: #1f8148; }
   </style>
 </head>
 <body>
@@ -223,19 +237,39 @@
       <div id="stream-container" style="display:none; width:100%; margin-top:1rem; border:1px solid #333; border-radius:4px; overflow:hidden;"></div>
     </section>
 
-    <!-- HTML Viewer (Persistent iframe) -->
+    <!-- HTML Viewer (Decentralized Browser) -->
     <section>
-      <h2>HTML Viewer</h2>
-      <div class="label">Object ID</div>
-      <input id="iframe-object-id" type="text" placeholder="hex object id" />
-      <div class="label" style="margin-top:0.75rem">OR Share URL</div>
-      <input id="iframe-share-url" type="text" placeholder="sia:// or https:// share URL" />
-      <div class="row" style="margin-top:0.5rem">
-        <button id="btn-load-iframe">Load HTML</button>
+      <h2>🌐 Decentralized Browser</h2>
+
+      <!-- Browser Navigation Controls -->
+      <div class="browser-nav" id="browser-nav">
+        <div class="browser-nav-row">
+          <button id="btn-back" title="Go Back" disabled>◀ Back</button>
+          <button id="btn-forward" title="Go Forward" disabled>Forward ▶</button>
+          <input type="text" class="address-bar" id="address-bar" placeholder="Paste Sia share URL or object ID..." title="Press Enter or click a file type button">
+        </div>
+        <div class="browser-nav-row">
+          <button id="btn-load-html" title="Load as HTML">📄 HTML</button>
+          <button id="btn-load-pdf" title="Download and open PDF in new tab">📕 PDF</button>
+          <button id="btn-load-image" title="Load as Image">🖼️ Image</button>
+          <button id="btn-load-video" title="Load as Video">🎬 Video</button>
+          <button id="btn-external-tab" title="Open in External Tab (⚠️ JavaScript enabled)" style="background:#f59e0b; border-color:#f59e0b;">⚠️ External Tab</button>
+        </div>
       </div>
-      <progress id="iframe-progress" max="100" value="0" style="display:none"></progress>
+
+      <progress id="iframe-progress" max="100" value="0" style="display:none; margin-top:1rem"></progress>
       <div class="output" id="iframe-status"></div>
-      <iframe id="html-iframe" style="display:none; width:100%; height:600px; margin-top:1rem; border:1px solid #333; border-radius:4px; background:white;" sandbox="allow-same-origin"></iframe>
+
+      <!-- Browser Container with Iframe and History -->
+      <div class="browser-container" id="browser-container">
+        <div class="browser-main">
+          <iframe id="html-iframe" style="width:100%; height:600px; border:1px solid #333; border-radius:4px; background:white;" sandbox="allow-same-origin"></iframe>
+        </div>
+        <div class="browser-history">
+          <h3>📜 History</h3>
+          <div id="history-list"></div>
+        </div>
+      </div>
     </section>
 
   </div>
@@ -953,31 +987,180 @@
       }
     });
 
-    // -- HTML Viewer (Persistent iframe) --
-    document.getElementById('btn-load-iframe').addEventListener('click', async () => {
+    // -- Decentralized Browser (HTML Viewer with Navigation) --
+    const browserHistory = [];
+    let currentHistoryIndex = -1;
+
+    function updateBrowserUI() {
+      const backBtn = document.getElementById('btn-back');
+      const forwardBtn = document.getElementById('btn-forward');
+      const addressBar = document.getElementById('address-bar');
+      const historyList = document.getElementById('history-list');
+
+      // Update back/forward buttons
+      backBtn.disabled = currentHistoryIndex <= 0;
+      forwardBtn.disabled = currentHistoryIndex >= browserHistory.length - 1;
+
+      // Update address bar
+      if (currentHistoryIndex >= 0 && browserHistory[currentHistoryIndex]) {
+        const current = browserHistory[currentHistoryIndex];
+        addressBar.value = current.displayUrl;
+        addressBar.title = current.displayUrl;
+      } else {
+        addressBar.value = '';
+        addressBar.placeholder = 'Enter Sia share URL or object ID...';
+      }
+
+      // Update history list
+      historyList.innerHTML = '';
+      browserHistory.forEach((item, index) => {
+        const historyItem = document.createElement('div');
+        historyItem.className = 'history-item' + (index === currentHistoryIndex ? ' active' : '');
+        historyItem.textContent = item.title || item.displayUrl;
+        historyItem.title = item.displayUrl;
+        historyItem.addEventListener('click', () => navigateToHistory(index));
+        historyList.appendChild(historyItem);
+      });
+    }
+
+    function navigateToHistory(index) {
+      if (index < 0 || index >= browserHistory.length) return;
+      currentHistoryIndex = index;
+      const item = browserHistory[index];
+      const iframe = document.getElementById('html-iframe');
+      iframe.src = item.blobUrl;
+      updateBrowserUI();
+    }
+
+    function addToHistory(displayUrl, blobUrl, title = null) {
+      console.log('🔍 addToHistory called:', {
+        displayUrl,
+        currentHistoryIndex,
+        historyLength: browserHistory.length,
+        willSplice: currentHistoryIndex < browserHistory.length - 1
+      });
+
+      // Remove any forward history if we're not at the end
+      if (currentHistoryIndex < browserHistory.length - 1) {
+        const spliceCount = browserHistory.length - currentHistoryIndex - 1;
+        console.log(`✂️ Splicing ${spliceCount} items from index ${currentHistoryIndex + 1}`);
+        browserHistory.splice(currentHistoryIndex + 1);
+      }
+
+      browserHistory.push({ displayUrl, blobUrl, title: title || displayUrl.substring(0, 50) });
+      currentHistoryIndex = browserHistory.length - 1;
+
+      console.log('✅ History updated:', {
+        newHistoryLength: browserHistory.length,
+        newCurrentIndex: currentHistoryIndex,
+        allTitles: browserHistory.map(h => h.title || h.displayUrl)
+      });
+
+      updateBrowserUI();
+    }
+
+    // Back button
+    document.getElementById('btn-back').addEventListener('click', () => {
+      if (currentHistoryIndex > 0) {
+        navigateToHistory(currentHistoryIndex - 1);
+      }
+    });
+
+    // Forward button
+    document.getElementById('btn-forward').addEventListener('click', () => {
+      if (currentHistoryIndex < browserHistory.length - 1) {
+        navigateToHistory(currentHistoryIndex + 1);
+      }
+    });
+
+    // Address bar navigation (Enter key)
+    document.getElementById('address-bar').addEventListener('keypress', async (e) => {
+      if (e.key === 'Enter') {
+        const url = e.target.value.trim();
+        if (!url) return;
+
+        const status = document.getElementById('iframe-status');
+        const progress = document.getElementById('iframe-progress');
+        const iframe = document.getElementById('html-iframe');
+        const browserNav = document.getElementById('browser-nav');
+        const browserContainer = document.getElementById('browser-container');
+
+        progress.style.display = 'none';
+        progress.value = 0;
+
+        try {
+          const sdk = await connectSdk(status);
+          if (!sdk) return;
+
+          status.textContent = 'Fetching object...';
+          // Check if it's a share URL or object ID
+          const obj = url.startsWith('sia://')
+            ? await sdk.sharedObject(url)
+            : await sdk.object(url);
+          const size = obj.size();
+
+          progress.style.display = 'block';
+          status.textContent = 'Downloading...';
+
+          const downloadStart = performance.now();
+          let lastProgressUpdate = 0;
+          const PROGRESS_THROTTLE_MS = 100;
+
+          const data = await sdk.downloadWithProgress(obj, (current, total) => {
+            const now = performance.now();
+            if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
+              progress.max = total;
+              progress.value = current;
+              status.textContent = `Downloading... ${current}/${total} slabs`;
+              lastProgressUpdate = now;
+            }
+          });
+
+          const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+          progress.value = progress.max;
+
+          // Load into iframe (let browser detect content type)
+          const blob = new Blob([data]);
+          const blobUrl = URL.createObjectURL(blob);
+          iframe.src = blobUrl;
+
+          // Add to history
+          const displayUrl = url.startsWith('sia://') ? url.substring(0, 50) + '...' : `object://${url.substring(0, 16)}...`;
+          addToHistory(displayUrl, blobUrl);
+
+          status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">Page loaded!</span>`;
+        } catch (e) {
+          status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+        }
+      }
+    });
+
+    // Generic function to load content with specified MIME type
+    async function loadContentAs(mimeType, typeLabel) {
+      const addressBar = document.getElementById('address-bar');
+      const url = addressBar.value.trim();
+
+      if (!url) {
+        const status = document.getElementById('iframe-status');
+        status.innerHTML = '<span style="color:#f59e0b">⚠️ Enter a URL in the address bar first.</span>';
+        return;
+      }
+
       const status = document.getElementById('iframe-status');
       const progress = document.getElementById('iframe-progress');
       const iframe = document.getElementById('html-iframe');
-      const objectId = document.getElementById('iframe-object-id').value.trim();
-      const shareUrl = document.getElementById('iframe-share-url').value.trim();
 
       progress.style.display = 'none';
       progress.value = 0;
-      iframe.style.display = 'none';
-
-      if (!objectId && !shareUrl) {
-        status.innerHTML = '<span class="fail">Enter an Object ID or Share URL</span>';
-        return;
-      }
 
       try {
         const sdk = await connectSdk(status);
         if (!sdk) return;
 
-        status.textContent = 'Fetching HTML...';
-        const obj = shareUrl
-          ? await sdk.sharedObject(shareUrl)
-          : await sdk.object(objectId);
+        status.textContent = `Fetching ${typeLabel}...`;
+        const obj = url.startsWith('sia://')
+          ? await sdk.sharedObject(url)
+          : await sdk.object(url);
         const size = obj.size();
 
         progress.style.display = 'block';
@@ -1000,15 +1183,253 @@
         const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
         progress.value = progress.max;
 
-        // Load HTML into iframe
-        const blob = new Blob([data], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        iframe.src = url;
-        iframe.style.display = 'block';
+        // Load into iframe with specified MIME type
+        const blob = new Blob([data], { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+        iframe.src = blobUrl;
 
-        status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">HTML loaded! Navigate freely within the iframe.</span>`;
+        // Add to history
+        const displayUrl = `${typeLabel}: ${url.startsWith('sia://') ? url.substring(0, 40) + '...' : url.substring(0, 20) + '...'}`;
+        addToHistory(displayUrl, blobUrl);
+
+        status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">${typeLabel} loaded!</span>`;
       } catch (e) {
-        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+        status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
+      }
+    }
+
+    // PDF loader - opens in new tab (Chrome blocks PDFs in sandboxed iframes)
+    async function loadPdfInNewTab() {
+      const addressBar = document.getElementById('address-bar');
+      const url = addressBar.value.trim();
+
+      if (!url) {
+        const status = document.getElementById('iframe-status');
+        status.innerHTML = '<span style="color:#f59e0b">⚠️ Enter a URL in the address bar first.</span>';
+        return;
+      }
+
+      const status = document.getElementById('iframe-status');
+      const progress = document.getElementById('iframe-progress');
+
+      progress.style.display = 'none';
+      progress.value = 0;
+
+      try {
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
+
+        status.textContent = 'Fetching PDF...';
+        const obj = url.startsWith('sia://')
+          ? await sdk.sharedObject(url)
+          : await sdk.object(url);
+        const size = obj.size();
+
+        progress.style.display = 'block';
+        status.textContent = 'Downloading...';
+
+        const downloadStart = performance.now();
+        let lastProgressUpdate = 0;
+        const PROGRESS_THROTTLE_MS = 100;
+
+        const data = await sdk.downloadWithProgress(obj, (current, total) => {
+          const now = performance.now();
+          if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
+            progress.max = total;
+            progress.value = current;
+            status.textContent = `Downloading PDF... ${current}/${total} slabs`;
+            lastProgressUpdate = now;
+          }
+        });
+
+        const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+        progress.value = progress.max;
+
+        // Open PDF in new tab
+        const blob = new Blob([data], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+
+        status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">PDF opened in new tab!</span>`;
+      } catch (e) {
+        status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
+      }
+    }
+
+    // File type buttons
+    document.getElementById('btn-load-html').addEventListener('click', () => loadContentAs('text/html', 'HTML'));
+    document.getElementById('btn-load-pdf').addEventListener('click', loadPdfInNewTab);
+    document.getElementById('btn-load-image').addEventListener('click', () => loadContentAs('image/jpeg', 'Image'));
+    document.getElementById('btn-load-video').addEventListener('click', () => loadContentAs('video/mp4', 'Video'));
+
+    // Open in external tab (with warning)
+    document.getElementById('btn-external-tab').addEventListener('click', async () => {
+      console.log('External Tab clicked', { currentHistoryIndex, historyLength: browserHistory.length });
+
+      // Show warning first
+      const confirmed = confirm('⚠️ WARNING: This will allow the downloaded page to execute JavaScript!\n\nOpening content in an external tab removes all sandbox protections. Only proceed if you trust the content.\n\nUse the regular "New Tab" button for safer viewing, or view inside the iframe viewer if the content is untrusted.');
+
+      if (!confirmed) return;
+
+      // If there's already a loaded page, open it
+      if (currentHistoryIndex >= 0 && browserHistory[currentHistoryIndex]) {
+        const blobUrl = browserHistory[currentHistoryIndex].blobUrl;
+        console.log('Opening blob URL in external tab:', blobUrl);
+        window.open(blobUrl, '_blank');
+        return;
+      }
+
+      // Otherwise, check if there's a URL in the address bar
+      const addressBar = document.getElementById('address-bar');
+      const url = addressBar.value.trim();
+
+      if (!url) {
+        const status = document.getElementById('iframe-status');
+        status.innerHTML = '<span style="color:#f59e0b">⚠️ Enter a URL in the address bar first.</span>';
+        return;
+      }
+
+      // Download and open in new tab
+      const status = document.getElementById('iframe-status');
+      const progress = document.getElementById('iframe-progress');
+
+      progress.style.display = 'none';
+      progress.value = 0;
+
+      try {
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
+
+        status.textContent = 'Downloading for external tab...';
+        const obj = url.startsWith('sia://')
+          ? await sdk.sharedObject(url)
+          : await sdk.object(url);
+
+        progress.style.display = 'block';
+        const data = await sdk.downloadWithProgress(obj, (current, total) => {
+          progress.max = total;
+          progress.value = current;
+          status.textContent = `Downloading... ${current}/${total} slabs`;
+        });
+
+        progress.value = progress.max;
+
+        // Open in external tab (let browser detect content type)
+        const blob = new Blob([data]);
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+
+        status.innerHTML = '<span class="pass">✓ Opened in external tab!</span>';
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+      } catch (e) {
+        status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    // Listen for messages from iframe (e.g., from example.html buttons)
+    window.addEventListener('message', async (event) => {
+      const { type, url, title } = event.data;
+
+      if (type === 'LOAD_IN_VIEWER') {
+        // Load the share URL in the iframe viewer
+        const status = document.getElementById('iframe-status');
+        const progress = document.getElementById('iframe-progress');
+        const iframe = document.getElementById('html-iframe');
+        const browserNav = document.getElementById('browser-nav');
+        const browserContainer = document.getElementById('browser-container');
+
+        progress.style.display = 'none';
+        progress.value = 0;
+
+        try {
+          const sdk = await connectSdk(status);
+          if (!sdk) return;
+
+          status.textContent = `Loading ${title || 'file'}...`;
+          const obj = await sdk.sharedObject(url);
+          const size = obj.size();
+
+          progress.style.display = 'block';
+          status.textContent = 'Downloading...';
+
+          const downloadStart = performance.now();
+          let lastProgressUpdate = 0;
+          const PROGRESS_THROTTLE_MS = 100;
+
+          const data = await sdk.downloadWithProgress(obj, (current, total) => {
+            const now = performance.now();
+            if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
+              progress.max = total;
+              progress.value = current;
+              status.textContent = `Downloading... ${current}/${total} slabs`;
+              lastProgressUpdate = now;
+            }
+          });
+
+          const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+          progress.value = progress.max;
+
+          // Load into iframe (let browser detect content type)
+          const blob = new Blob([data]);
+          const blobUrl = URL.createObjectURL(blob);
+          iframe.src = blobUrl;
+
+          // Add to history
+          const displayUrl = title || url.substring(0, 50);
+          addToHistory(displayUrl, blobUrl, title);
+
+          status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">${title || 'File'} loaded!</span>`;
+        } catch (e) {
+          status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+        }
+      } else if (type === 'LOAD_IN_NEW_TAB') {
+        // Download and open in new tab
+        const status = document.getElementById('iframe-status');
+        const progress = document.getElementById('iframe-progress');
+
+        progress.style.display = 'none';
+        progress.value = 0;
+
+        try {
+          const sdk = await connectSdk(status);
+          if (!sdk) return;
+
+          status.textContent = `Downloading ${title || 'file'}...`;
+          const obj = await sdk.sharedObject(url);
+          const size = obj.size();
+
+          progress.style.display = 'block';
+          status.textContent = 'Downloading...';
+
+          const downloadStart = performance.now();
+          let lastProgressUpdate = 0;
+          const PROGRESS_THROTTLE_MS = 100;
+
+          const data = await sdk.downloadWithProgress(obj, (current, total) => {
+            const now = performance.now();
+            if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
+              progress.max = total;
+              progress.value = current;
+              status.textContent = `Downloading... ${current}/${total} slabs`;
+              lastProgressUpdate = now;
+            }
+          });
+
+          const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+          progress.value = progress.max;
+
+          // Open in new tab (let browser detect content type)
+          const blob = new Blob([data]);
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, '_blank');
+
+          status.innerHTML = `Size: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">${title || 'File'} opened in new tab!</span>`;
+
+          // Clean up blob URL after a delay
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } catch (e) {
+          status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+        }
       }
     });
 
