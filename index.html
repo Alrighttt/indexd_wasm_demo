@@ -251,6 +251,8 @@
           <button id="btn-load-pdf" title="Download and open PDF in new tab">📕 PDF</button>
           <button id="btn-load-image" title="Load as Image">🖼️ Image</button>
           <button id="btn-load-video" title="Load as Video">🎬 Video</button>
+          <button id="btn-load-audio" title="Load as Audio">🎵 Audio</button>
+          <button id="btn-load-text" title="Load as Text">📝 Text</button>
           <button id="btn-external-tab" title="Open in External Tab (⚠️ JavaScript enabled)" style="background:#f59e0b; border-color:#f59e0b;">HTML in External Tab</button>
         </div>
       </div>
@@ -1109,14 +1111,35 @@
 
         progress.value = progress.max;
 
-        // Create blob with appropriate MIME type
+        // Create blob with appropriate MIME type and wrapper
         let mimeType = 'text/html';
         if (item.fileType === 'pdf') mimeType = 'application/pdf';
         else if (item.fileType === 'image') mimeType = 'image/jpeg';
         else if (item.fileType === 'video') mimeType = 'video/mp4';
+        else if (item.fileType === 'audio') mimeType = 'audio/mpeg';
+        else if (item.fileType === 'text') mimeType = 'text/plain';
 
-        const blob = new Blob([data], { type: mimeType });
-        const blobUrl = URL.createObjectURL(blob);
+        // Create blob with appropriate wrapper for better display
+        let blobUrl;
+        if (item.fileType === 'text') {
+          // Wrap text in styled HTML for better readability
+          const text = new TextDecoder().decode(data);
+          const escapedText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:'Courier New',monospace;padding:1.5rem;background:#0a0a0a;color:#e0e0e0;margin:0;}pre{white-space:pre-wrap;word-wrap:break-word;margin:0;line-height:1.5;}</style></head><body><pre>${escapedText}</pre></body></html>`;
+          const blob = new Blob([html], { type: 'text/html' });
+          blobUrl = URL.createObjectURL(blob);
+        } else if (item.fileType === 'audio') {
+          // Wrap audio in HTML with styled player
+          const audioBlob = new Blob([data], { type: mimeType });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0;font-family:system-ui,sans-serif;}audio{width:90%;max-width:600px;}</style></head><body><h2 style="margin-bottom:2rem;">🎵 Audio Player</h2><audio controls autoplay><source src="${audioUrl}" type="${mimeType}">Your browser does not support the audio element.</audio></body></html>`;
+          const blob = new Blob([html], { type: 'text/html' });
+          blobUrl = URL.createObjectURL(blob);
+        } else {
+          // For other types, load directly
+          const blob = new Blob([data], { type: mimeType });
+          blobUrl = URL.createObjectURL(blob);
+        }
 
         // Update history item with new blob URL
         browserHistory[index].blobUrl = blobUrl;
@@ -1289,9 +1312,28 @@
         const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
         progress.value = progress.max;
 
-        // Load into iframe with specified MIME type
-        const blob = new Blob([data], { type: mimeType });
-        const blobUrl = URL.createObjectURL(blob);
+        // Create blob with appropriate wrapper for better display
+        let blobUrl;
+        if (mimeType === 'text/plain') {
+          // Wrap text in styled HTML for better readability
+          const text = new TextDecoder().decode(data);
+          const escapedText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:'Courier New',monospace;padding:1.5rem;background:#0a0a0a;color:#e0e0e0;margin:0;}pre{white-space:pre-wrap;word-wrap:break-word;margin:0;line-height:1.5;}</style></head><body><pre>${escapedText}</pre></body></html>`;
+          const blob = new Blob([html], { type: 'text/html' });
+          blobUrl = URL.createObjectURL(blob);
+        } else if (mimeType === 'audio/mpeg') {
+          // Wrap audio in HTML with styled player
+          const audioBlob = new Blob([data], { type: mimeType });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0;font-family:system-ui,sans-serif;}audio{width:90%;max-width:600px;}</style></head><body><h2 style="margin-bottom:2rem;">🎵 Audio Player</h2><audio controls autoplay><source src="${audioUrl}" type="${mimeType}">Your browser does not support the audio element.</audio></body></html>`;
+          const blob = new Blob([html], { type: 'text/html' });
+          blobUrl = URL.createObjectURL(blob);
+        } else {
+          // For other types (image, video, html), load directly
+          const blob = new Blob([data], { type: mimeType });
+          blobUrl = URL.createObjectURL(blob);
+        }
+
         iframe.src = blobUrl;
 
         // Add to history
@@ -1372,6 +1414,8 @@
     document.getElementById('btn-load-pdf').addEventListener('click', loadPdfInNewTab);
     document.getElementById('btn-load-image').addEventListener('click', () => loadContentAs('image/jpeg', 'Image'));
     document.getElementById('btn-load-video').addEventListener('click', () => loadContentAs('video/mp4', 'Video'));
+    document.getElementById('btn-load-audio').addEventListener('click', () => loadContentAs('audio/mpeg', 'Audio'));
+    document.getElementById('btn-load-text').addEventListener('click', () => loadContentAs('text/plain', 'Text'));
 
     // Open in external tab (with warning)
     document.getElementById('btn-external-tab').addEventListener('click', async () => {
