@@ -244,8 +244,6 @@
       <!-- Browser Navigation Controls -->
       <div class="browser-nav" id="browser-nav">
         <div class="browser-nav-row">
-          <button id="btn-back" title="Go Back" disabled>◀ Back</button>
-          <button id="btn-forward" title="Go Forward" disabled>Forward ▶</button>
           <input type="text" class="address-bar" id="address-bar" placeholder="Paste Sia share URL or object ID..." title="Press Enter or click a file type button">
         </div>
         <div class="browser-nav-row">
@@ -1030,14 +1028,8 @@
     loadHistoryFromStorage();
 
     function updateBrowserUI() {
-      const backBtn = document.getElementById('btn-back');
-      const forwardBtn = document.getElementById('btn-forward');
       const addressBar = document.getElementById('address-bar');
       const historyList = document.getElementById('history-list');
-
-      // Update back/forward buttons
-      backBtn.disabled = currentHistoryIndex <= 0;
-      forwardBtn.disabled = currentHistoryIndex >= browserHistory.length - 1;
 
       // Update address bar
       if (currentHistoryIndex >= 0 && browserHistory[currentHistoryIndex]) {
@@ -1186,20 +1178,6 @@
       updateBrowserUI();
       saveHistoryToStorage();
     }
-
-    // Back button
-    document.getElementById('btn-back').addEventListener('click', () => {
-      if (currentHistoryIndex > 0) {
-        navigateToHistory(currentHistoryIndex - 1);
-      }
-    });
-
-    // Forward button
-    document.getElementById('btn-forward').addEventListener('click', () => {
-      if (currentHistoryIndex < browserHistory.length - 1) {
-        navigateToHistory(currentHistoryIndex + 1);
-      }
-    });
 
     // Address bar navigation (Enter key)
     document.getElementById('address-bar').addEventListener('keypress', async (e) => {
