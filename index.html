@@ -1216,7 +1216,7 @@
     // Open in external tab (with warning)
     document.getElementById('btn-external-tab').addEventListener('click', async () => {
       // Show warning first
-      const confirmed = confirm('⚠️ WARNING: This will allow the downloaded page to execute JavaScript!\n\nOpening content in an external tab removes all sandbox protections. Only proceed if you trust the content.\n\nUse the regular "New Tab" button for safer viewing, or view inside the iframe viewer if the content is untrusted.');
+      const confirmed = confirm('⚠️ WARNING: This will allow the downloaded page to execute JavaScript!\n\nOpening content in an external tab removes all sandbox protections. Only proceed if you trust the content.\n\nUse the HTML button if the content is untrusted.');
 
       if (!confirmed) return;
 
