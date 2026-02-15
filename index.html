@@ -44,6 +44,9 @@
     .history-item { font-size: 0.75rem; padding: 0.4rem; margin-bottom: 0.25rem; background: #151515; border: 1px solid #2a2a2a; border-radius: 4px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: background 0.2s; }
     .history-item:hover { background: #1a1a1a; }
     .history-item.active { background: #1a6b3c; border-color: #1f8148; }
+    .history-item.downloaded { background: #0d3d20; border-color: #1a6b3c; }
+    .history-item.downloaded:hover { background: #114d28; }
+    .history-item.active.downloaded { background: #1a6b3c; border-color: #1f8148; }
   </style>
 </head>
 <body>
@@ -837,7 +840,10 @@
       historyList.innerHTML = '';
       browserHistory.forEach((item, index) => {
         const historyItem = document.createElement('div');
-        historyItem.className = 'history-item' + (index === currentHistoryIndex ? ' active' : '');
+        let classes = 'history-item';
+        if (index === currentHistoryIndex) classes += ' active';
+        if (item.blobUrl) classes += ' downloaded';
+        historyItem.className = classes;
 
         // Only show warning for external HTML tabs, not for PDFs (which are safe)
         const isPdf = item.displayUrl && item.displayUrl.startsWith('PDF:');
