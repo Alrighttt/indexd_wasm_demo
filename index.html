@@ -150,20 +150,6 @@
       <div class="output" id="ul-status"></div>
     </section>
 
-    <!-- Download Text -->
-    <section>
-      <h2>Download Text</h2>
-      <div class="label">Object ID (hex)</div>
-      <div class="row">
-        <input id="dt-object-id" type="text" placeholder="e.g. 0e90d697f504..." />
-        <button id="btn-download-text">Download</button>
-      </div>
-      <progress id="dt-progress" max="100" value="0" style="display:none"></progress>
-      <div class="output" id="dt-status"></div>
-      <div class="label" style="margin-top:0.75rem">Contents</div>
-      <div class="output" id="dt-contents" style="min-height:6rem; max-height:24rem; overflow-y:auto;"></div>
-    </section>
-
     <!-- Upload File -->
     <section>
       <h2>Upload File</h2>
@@ -211,30 +197,6 @@
         <button id="btn-share">Generate Link</button>
       </div>
       <div class="output" id="share-status"></div>
-    </section>
-
-    <!-- Media -->
-    <section>
-      <h2>Media</h2>
-      <div class="label">Media Type</div>
-      <select id="stream-media-type" style="width:100%; padding:0.5rem; background:#1a1a1a; color:#e0e0e0; border:1px solid #333; border-radius:4px; font-family:inherit; font-size:0.9rem; margin-bottom:0.75rem;">
-        <option value="html">HTML Page</option>
-        <option value="image">Image (jpg, png, gif, svg, webp)</option>
-        <option value="video">Video (mp4, webm, ogg)</option>
-        <option value="audio">Audio (mp3, wav, ogg)</option>
-        <option value="pdf">PDF Document</option>
-        <option value="text">Text File</option>
-      </select>
-      <div class="label">Object ID</div>
-      <input id="stream-object-id" type="text" placeholder="hex object id" />
-      <div class="label" style="margin-top:0.75rem">OR Share URL</div>
-      <input id="stream-share-url" type="text" placeholder="sia:// or https:// share URL" />
-      <div class="row" style="margin-top:0.5rem">
-        <button id="btn-stream-media">View Media</button>
-      </div>
-      <progress id="stream-progress" max="100" value="0" style="display:none"></progress>
-      <div class="output" id="stream-status"></div>
-      <div id="stream-container" style="display:none; width:100%; margin-top:1rem; border:1px solid #333; border-radius:4px; overflow:hidden;"></div>
     </section>
 
     <!-- HTML Viewer (Decentralized Browser) -->
@@ -643,52 +605,6 @@
       }
     });
 
-    // -- Download Text --
-    document.getElementById('btn-download-text').addEventListener('click', async () => {
-      const status = document.getElementById('dt-status');
-      const progress = document.getElementById('dt-progress');
-      const contents = document.getElementById('dt-contents');
-      const objectId = document.getElementById('dt-object-id').value.trim();
-
-      contents.textContent = '';
-      progress.style.display = 'none';
-      progress.value = 0;
-
-      if (!objectId) {
-        status.innerHTML = '<span class="fail">Enter an Object ID</span>';
-        return;
-      }
-
-      try {
-        const sdk = await connectSdk(status);
-        if (!sdk) return;
-
-        status.innerHTML += '\nFetching object metadata...';
-
-        const obj = await sdk.object(objectId);
-        const size = obj.size();
-        status.innerHTML = `Object found: ${formatSize(size)}`;
-
-        progress.style.display = 'block';
-        status.textContent = 'Downloading...';
-
-        const downloadStart = performance.now();
-        const data = await sdk.downloadWithProgress(obj, (current, total) => {
-          progress.max = total;
-          progress.value = current;
-          status.textContent = `Downloading... ${current}/${total} slabs`;
-        });
-        const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
-        const text = new TextDecoder('utf-8', { fatal: false }).decode(data);
-
-        progress.value = progress.max;
-        status.innerHTML = `Size: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Download complete!</span>`;
-        contents.textContent = text;
-      } catch (e) {
-        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
-      }
-    });
-
     // -- Upload File --
     let selectedFile = null;
     const dropzone = document.getElementById('uf-dropzone');
@@ -856,132 +772,6 @@
         status.innerHTML = `<span class="pass">Share link created!</span>\nExpires: ${expiresAt}\n\n<a href="${shareUrl}" target="_blank" rel="noopener" style="color:#60a5fa; word-break:break-all;">${shareUrl}</a>`;
 
         document.getElementById('share-url').value = shareUrl;
-      } catch (e) {
-        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
-      }
-    });
-
-    // -- Media --
-    document.getElementById('btn-stream-media').addEventListener('click', async () => {
-      const status = document.getElementById('stream-status');
-      const progress = document.getElementById('stream-progress');
-      const container = document.getElementById('stream-container');
-      const objectId = document.getElementById('stream-object-id').value.trim();
-      const shareUrl = document.getElementById('stream-share-url').value.trim();
-      const mediaType = document.getElementById('stream-media-type').value;
-
-      progress.style.display = 'none';
-      progress.value = 0;
-      container.style.display = 'none';
-      container.innerHTML = '';
-
-      if (!objectId && !shareUrl) {
-        status.innerHTML = '<span class="fail">Enter an Object ID or Share URL</span>';
-        return;
-      }
-
-      try {
-        const sdk = await connectSdk(status);
-        if (!sdk) return;
-
-        status.textContent = 'Fetching object metadata...';
-        const obj = shareUrl
-          ? await sdk.sharedObject(shareUrl)
-          : await sdk.object(objectId);
-        const size = obj.size();
-        status.innerHTML = `Object found: ${formatSize(size)}`;
-
-        progress.style.display = 'block';
-        container.style.display = 'block';
-        status.textContent = 'Streaming...';
-
-        const chunks = [];
-        const streamStart = performance.now();
-        let lastProgressUpdate = 0;
-        const PROGRESS_THROTTLE_MS = 100; // Throttle progress updates to prevent browser flooding
-
-        // Create appropriate element based on media type
-        let element;
-        let mimeType;
-
-        switch (mediaType) {
-          case 'html':
-            element = document.createElement('iframe');
-            element.sandbox = 'allow-same-origin';
-            element.style.cssText = 'width:100%; height:400px; border:none;';
-            mimeType = 'text/html';
-            break;
-          case 'image':
-            element = document.createElement('img');
-            element.style.cssText = 'max-width:100%; height:auto; display:block;';
-            mimeType = 'image/*';
-            break;
-          case 'video':
-            element = document.createElement('video');
-            element.controls = true;
-            element.style.cssText = 'width:100%; max-height:500px;';
-            mimeType = 'video/*';
-            break;
-          case 'audio':
-            element = document.createElement('audio');
-            element.controls = true;
-            element.style.cssText = 'width:100%;';
-            mimeType = 'audio/*';
-            break;
-          case 'pdf':
-            element = document.createElement('iframe');
-            element.style.cssText = 'width:100%; height:600px; border:none;';
-            mimeType = 'application/pdf';
-            break;
-          case 'text':
-            element = document.createElement('pre');
-            element.style.cssText = 'padding:1rem; background:#0a0a0a; color:#e0e0e0; overflow:auto; max-height:500px; margin:0;';
-            mimeType = 'text/plain';
-            break;
-        }
-
-        container.appendChild(element);
-
-        await sdk.downloadStreaming(obj,
-          (chunk) => {
-            chunks.push(chunk);
-
-            if (mediaType === 'text') {
-              // For text, decode and append incrementally
-              const decoder = new TextDecoder();
-              element.textContent = decoder.decode(new Uint8Array(chunks.flat()));
-            } else if (mediaType === 'html') {
-              // For HTML, update iframe incrementally
-              const blob = new Blob(chunks, { type: mimeType });
-              const url = URL.createObjectURL(blob);
-              element.src = url;
-            }
-            // For image/video/audio/pdf, buffer silently and set src once at the end
-          },
-          (current, total) => {
-            // Throttle progress updates to prevent browser navigation throttling
-            const now = performance.now();
-            if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
-              progress.max = total;
-              progress.value = current;
-              status.textContent = `Buffering... ${current}/${total} slabs`;
-              lastProgressUpdate = now;
-            }
-          }
-        );
-
-        // Set src for image/video/audio/pdf after all chunks are buffered
-        if (mediaType === 'image' || mediaType === 'video' || mediaType === 'audio' || mediaType === 'pdf') {
-          const blob = new Blob(chunks, { type: mimeType });
-          const url = URL.createObjectURL(blob);
-          element.src = url;
-        }
-
-        const elapsed = ((performance.now() - streamStart) / 1000).toFixed(1);
-        progress.value = progress.max;
-
-        const typeLabel = mediaType.charAt(0).toUpperCase() + mediaType.slice(1);
-        status.innerHTML = `Size: ${formatSize(size)}\nBuffered in ${elapsed}s\n<span class="pass">${typeLabel} ready to view!</span>`;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
