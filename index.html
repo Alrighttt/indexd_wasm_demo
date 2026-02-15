@@ -253,7 +253,7 @@
           <button id="btn-load-pdf" title="Download and open PDF in new tab">📕 PDF</button>
           <button id="btn-load-image" title="Load as Image">🖼️ Image</button>
           <button id="btn-load-video" title="Load as Video">🎬 Video</button>
-          <button id="btn-external-tab" title="Open in External Tab (⚠️ JavaScript enabled)" style="background:#f59e0b; border-color:#f59e0b;">⚠️ External Tab</button>
+          <button id="btn-external-tab" title="Open in External Tab (⚠️ JavaScript enabled)" style="background:#f59e0b; border-color:#f59e0b;">HTML in External Tab</button>
         </div>
       </div>
 
@@ -988,8 +988,46 @@
     });
 
     // -- Decentralized Browser (HTML Viewer with Navigation) --
+    const HISTORY_STORAGE_KEY = 'sia-browser-history';
     const browserHistory = [];
     let currentHistoryIndex = -1;
+
+    // Load history from localStorage on page load
+    function loadHistoryFromStorage() {
+      try {
+        const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Restore history items (blob URLs will be null after refresh)
+          browserHistory.push(...parsed);
+          console.log(`📚 Restored ${browserHistory.length} history items from localStorage`);
+          updateBrowserUI();
+        }
+      } catch (e) {
+        console.error('Failed to load history from storage:', e);
+      }
+    }
+
+    // Save history to localStorage
+    function saveHistoryToStorage() {
+      try {
+        // Save history without blob URLs (they're temporary)
+        const toSave = browserHistory.map(item => ({
+          displayUrl: item.displayUrl,
+          title: item.title,
+          external: item.external,
+          originalUrl: item.originalUrl,
+          fileType: item.fileType,
+          blobUrl: null  // Don't save blob URLs - they won't work after refresh
+        }));
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(toSave));
+      } catch (e) {
+        console.error('Failed to save history to storage:', e);
+      }
+    }
+
+    // Load history when page loads
+    loadHistoryFromStorage();
 
     function updateBrowserUI() {
       const backBtn = document.getElementById('btn-back');
@@ -1016,38 +1054,127 @@
       browserHistory.forEach((item, index) => {
         const historyItem = document.createElement('div');
         historyItem.className = 'history-item' + (index === currentHistoryIndex ? ' active' : '');
-        historyItem.textContent = item.title || item.displayUrl;
-        historyItem.title = item.displayUrl;
+
+        // Only show warning for external HTML tabs, not for PDFs (which are safe)
+        const isPdf = item.displayUrl && item.displayUrl.startsWith('PDF:');
+        const showWarning = item.external && !isPdf;
+
+        historyItem.textContent = (showWarning ? '⚠️ ' : '') + (item.title || item.displayUrl);
+        historyItem.title = (showWarning ? '[External Tab] ' : '') + item.displayUrl;
         historyItem.addEventListener('click', () => navigateToHistory(index));
         historyList.appendChild(historyItem);
       });
     }
 
-    function navigateToHistory(index) {
+    async function navigateToHistory(index) {
       if (index < 0 || index >= browserHistory.length) return;
       currentHistoryIndex = index;
       const item = browserHistory[index];
-      const iframe = document.getElementById('html-iframe');
-      iframe.src = item.blobUrl;
+
+      // If blob URL is null (e.g., after page refresh), re-download the file
+      if (!item.blobUrl) {
+        console.log('🔄 Blob URL missing, re-downloading:', item.originalUrl);
+        await redownloadHistoryItem(item, index);
+        return;
+      }
+
+      // If this is an external tab item, reopen it in external tab
+      if (item.external) {
+        window.open(item.blobUrl, '_blank');
+      } else {
+        // Load in iframe
+        const iframe = document.getElementById('html-iframe');
+        iframe.src = item.blobUrl;
+      }
       updateBrowserUI();
     }
 
-    function addToHistory(displayUrl, blobUrl, title = null) {
+    // Re-download a history item (when blob URL is missing after refresh)
+    async function redownloadHistoryItem(item, index) {
+      const status = document.getElementById('iframe-status');
+      const progress = document.getElementById('iframe-progress');
+      const iframe = document.getElementById('html-iframe');
+
+      progress.style.display = 'none';
+      progress.value = 0;
+
+      try {
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
+
+        status.textContent = `Re-downloading ${item.fileType}...`;
+
+        const obj = item.originalUrl.startsWith('sia://')
+          ? await sdk.sharedObject(item.originalUrl)
+          : await sdk.object(item.originalUrl);
+
+        progress.style.display = 'block';
+        const data = await sdk.downloadWithProgress(obj, (current, total) => {
+          progress.max = total;
+          progress.value = current;
+          status.textContent = `Downloading... ${current}/${total} slabs`;
+        });
+
+        progress.value = progress.max;
+
+        // Create blob with appropriate MIME type
+        let mimeType = 'text/html';
+        if (item.fileType === 'pdf') mimeType = 'application/pdf';
+        else if (item.fileType === 'image') mimeType = 'image/jpeg';
+        else if (item.fileType === 'video') mimeType = 'video/mp4';
+
+        const blob = new Blob([data], { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+
+        // Update history item with new blob URL
+        browserHistory[index].blobUrl = blobUrl;
+
+        // Load the file
+        if (item.external || item.fileType === 'pdf') {
+          window.open(blobUrl, '_blank');
+          status.innerHTML = '<span class="pass">✓ Reopened in new tab!</span>';
+        } else {
+          iframe.src = blobUrl;
+          status.innerHTML = '<span class="pass">✓ Loaded!</span>';
+        }
+
+        updateBrowserUI();
+      } catch (e) {
+        status.innerHTML = `<span class="fail">Error re-downloading: ${e.message}</span>`;
+      }
+    }
+
+    function addToHistory(displayUrl, blobUrl, title = null, external = false, originalUrl = '', fileType = 'html') {
       console.log('🔍 addToHistory called:', {
         displayUrl,
+        external,
+        originalUrl,
+        fileType,
         currentHistoryIndex,
-        historyLength: browserHistory.length,
-        willSplice: currentHistoryIndex < browserHistory.length - 1
+        historyLength: browserHistory.length
       });
 
-      // Remove any forward history if we're not at the end
-      if (currentHistoryIndex < browserHistory.length - 1) {
-        const spliceCount = browserHistory.length - currentHistoryIndex - 1;
-        console.log(`✂️ Splicing ${spliceCount} items from index ${currentHistoryIndex + 1}`);
-        browserHistory.splice(currentHistoryIndex + 1);
+      // Check if this URL already exists in history (by original URL, not blob URL)
+      const existingIndex = browserHistory.findIndex(item =>
+        item.originalUrl === originalUrl && item.fileType === fileType
+      );
+
+      if (existingIndex !== -1) {
+        // URL already exists - navigate to that tab instead
+        console.log(`📍 URL already exists at index ${existingIndex}, navigating there`);
+        navigateToHistory(existingIndex);
+        return;
       }
 
-      browserHistory.push({ displayUrl, blobUrl, title: title || displayUrl.substring(0, 50) });
+      // New URL - always append to the end (tab bar behavior)
+      browserHistory.push({
+        displayUrl,
+        blobUrl,
+        title: title || displayUrl,
+        external,
+        originalUrl,
+        fileType
+      });
       currentHistoryIndex = browserHistory.length - 1;
 
       console.log('✅ History updated:', {
@@ -1057,6 +1184,7 @@
       });
 
       updateBrowserUI();
+      saveHistoryToStorage();
     }
 
     // Back button
@@ -1125,8 +1253,8 @@
           iframe.src = blobUrl;
 
           // Add to history
-          const displayUrl = url.startsWith('sia://') ? url.substring(0, 50) + '...' : `object://${url.substring(0, 16)}...`;
-          addToHistory(displayUrl, blobUrl);
+          const displayUrl = url.startsWith('sia://') ? url : `object://${url}`;
+          addToHistory(displayUrl, blobUrl, displayUrl, false, url, 'html');
 
           status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">Page loaded!</span>`;
         } catch (e) {
@@ -1189,8 +1317,9 @@
         iframe.src = blobUrl;
 
         // Add to history
-        const displayUrl = `${typeLabel}: ${url.startsWith('sia://') ? url.substring(0, 40) + '...' : url.substring(0, 20) + '...'}`;
-        addToHistory(displayUrl, blobUrl);
+        const displayUrl = `${typeLabel}: ${url}`;
+        const fileType = typeLabel.toLowerCase();
+        addToHistory(displayUrl, blobUrl, displayUrl, false, url, fileType);
 
         status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">${typeLabel} loaded!</span>`;
       } catch (e) {
@@ -1250,6 +1379,10 @@
         const blobUrl = URL.createObjectURL(blob);
         window.open(blobUrl, '_blank');
 
+        // Add to history with external flag (PDFs open in new tabs)
+        const displayUrl = `PDF: ${url}`;
+        addToHistory(displayUrl, blobUrl, displayUrl, true, url, 'pdf');
+
         status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">PDF opened in new tab!</span>`;
       } catch (e) {
         status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
@@ -1264,22 +1397,12 @@
 
     // Open in external tab (with warning)
     document.getElementById('btn-external-tab').addEventListener('click', async () => {
-      console.log('External Tab clicked', { currentHistoryIndex, historyLength: browserHistory.length });
-
       // Show warning first
       const confirmed = confirm('⚠️ WARNING: This will allow the downloaded page to execute JavaScript!\n\nOpening content in an external tab removes all sandbox protections. Only proceed if you trust the content.\n\nUse the regular "New Tab" button for safer viewing, or view inside the iframe viewer if the content is untrusted.');
 
       if (!confirmed) return;
 
-      // If there's already a loaded page, open it
-      if (currentHistoryIndex >= 0 && browserHistory[currentHistoryIndex]) {
-        const blobUrl = browserHistory[currentHistoryIndex].blobUrl;
-        console.log('Opening blob URL in external tab:', blobUrl);
-        window.open(blobUrl, '_blank');
-        return;
-      }
-
-      // Otherwise, check if there's a URL in the address bar
+      // Check if there's a URL in the address bar
       const addressBar = document.getElementById('address-bar');
       const url = addressBar.value.trim();
 
@@ -1314,13 +1437,16 @@
 
         progress.value = progress.max;
 
-        // Open in external tab (let browser detect content type)
-        const blob = new Blob([data]);
+        // Open in external tab with HTML content type
+        const blob = new Blob([data], { type: 'text/html' });
         const blobUrl = URL.createObjectURL(blob);
         window.open(blobUrl, '_blank');
 
+        // Add to history with external flag
+        const displayUrl = `External: ${url}`;
+        addToHistory(displayUrl, blobUrl, displayUrl, true, url, 'external');
+
         status.innerHTML = '<span class="pass">✓ Opened in external tab!</span>';
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
       } catch (e) {
         status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
       }
@@ -1375,8 +1501,8 @@
           iframe.src = blobUrl;
 
           // Add to history
-          const displayUrl = title || url.substring(0, 50);
-          addToHistory(displayUrl, blobUrl, title);
+          const displayUrl = title || url;
+          addToHistory(displayUrl, blobUrl, title, false, url, 'html');
 
           status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">${title || 'File'} loaded!</span>`;
         } catch (e) {
