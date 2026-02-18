@@ -41,12 +41,14 @@
     .browser-main { flex: 1; min-width: 0; }
     .browser-history { width: 200px; background: #0d0d0d; border: 1px solid #222; border-radius: 4px; padding: 0.75rem; max-height: 600px; overflow-y: auto; }
     .browser-history h3 { font-size: 0.85rem; color: #b0b0b0; margin-bottom: 0.5rem; }
-    .history-item { font-size: 0.75rem; padding: 0.4rem; margin-bottom: 0.25rem; background: #151515; border: 1px solid #2a2a2a; border-radius: 4px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: background 0.2s; }
+    .history-item { font-size: 0.75rem; padding: 0.4rem; margin-bottom: 0.25rem; background: #151515; border: 1px solid #2a2a2a; border-radius: 4px; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; gap: 0.5rem; }
     .history-item:hover { background: #1a1a1a; }
     .history-item.active { background: #1a6b3c; border-color: #1f8148; }
     .history-item.downloaded { background: #0d3d20; border-color: #1a6b3c; }
     .history-item.downloaded:hover { background: #114d28; }
     .history-item.active.downloaded { background: #1a6b3c; border-color: #1f8148; }
+    .history-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; cursor: pointer; }
+    .history-delete { flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -99,6 +101,7 @@
         <button id="btn-validate">Validate</button>
       </div>
       <div class="output" id="phrase-output"></div>
+
     </section>
 
     <!-- Register -->
@@ -171,10 +174,8 @@
     <!-- Download File -->
     <section>
       <h2>Download File</h2>
-      <div class="label">Object ID (hex)</div>
-      <input id="dl-object-id" type="text" placeholder="e.g. 0e90d697f504..." style="margin-bottom:0.5rem" />
-      <div class="label" style="margin-top:0.75rem">OR Share URL</div>
-      <input id="dl-share-url" type="text" placeholder="sia:// or https:// share URL" style="margin-bottom:0.5rem" />
+      <div class="label">Object ID or Share URL</div>
+      <input id="dl-url" type="text" placeholder="Paste sia:// URL or object ID (hex)" style="margin-bottom:0.5rem" />
       <div class="label">Filename</div>
       <div class="row">
         <input id="dl-filename" type="text" placeholder="e.g. photo.jpg" />
@@ -209,16 +210,12 @@
       <!-- Browser Navigation Controls -->
       <div class="browser-nav" id="browser-nav">
         <div class="browser-nav-row">
-          <input type="text" class="address-bar" id="address-bar" placeholder="Paste Sia share URL or object ID..." title="Press Enter or click a file type button">
+          <input type="text" class="address-bar" id="address-bar" placeholder="Paste Sia share URL or object ID..." title="Press Enter or click Go to auto-detect file type" style="flex:1;">
+          <button id="btn-go" title="Auto-detect file type and load content" style="background:#10b981; border-color:#10b981; font-weight:bold; padding:0.5rem 2rem;">Go</button>
         </div>
-        <div class="browser-nav-row">
-          <button id="btn-load-html" title="Load as HTML">📄 HTML</button>
-          <button id="btn-load-pdf" title="Download and open PDF in new tab">📕 PDF</button>
-          <button id="btn-load-image" title="Load as Image">🖼️ Image</button>
-          <button id="btn-load-video" title="Load as Video">🎬 Video</button>
-          <button id="btn-load-audio" title="Load as Audio">🎵 Audio</button>
-          <button id="btn-load-text" title="Load as Text">📝 Text</button>
-          <button id="btn-external-tab" title="Open in External Tab (⚠️ JavaScript enabled)" style="background:#f59e0b; border-color:#f59e0b;">HTML in External Tab</button>
+        <div class="browser-nav-row" style="justify-content:flex-start; gap:0.5rem;">
+          <button id="btn-external-tab" title="⚠️ Opens in new tab with JavaScript enabled - use only for trusted content" style="background:#f59e0b; border-color:#f59e0b; font-size:0.85rem; padding:0.4rem 0.8rem;">⚠️ Open in External Tab</button>
+          <span style="color:#888; font-size:0.8rem; font-style:italic;">Warning: External tab allows JavaScript execution</span>
         </div>
       </div>
 
@@ -229,6 +226,10 @@
       <div class="browser-container" id="browser-container">
         <div class="browser-main">
           <iframe id="html-iframe" style="width:100%; height:600px; border:1px solid #333; border-radius:4px; background:white;" sandbox="allow-same-origin"></iframe>
+          <!-- MSE Video Player (outside sandboxed iframe) -->
+          <div id="video-container" style="display:none; width:100%; height:600px; border:1px solid #333; border-radius:4px; background:#0a0a0a; padding:2rem; box-sizing:border-box;">
+            <video id="mse-video" controls autoplay style="width:100%; max-height:100%; background:#000;"></video>
+          </div>
         </div>
         <div class="browser-history">
           <h3>📜 History</h3>
@@ -246,6 +247,29 @@
       AppKey,
       Builder,
     } from './pkg/indexd_wasm.js';
+
+    // Import file-type for MIME detection
+    import {fileTypeFromBlob} from 'https://cdn.jsdelivr.net/npm/file-type@19/+esm';
+
+    // Check browser compatibility on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      console.log('🌐 Browser compatibility check:');
+      console.log('  WebTransport:', typeof WebTransport !== 'undefined' ? '✅ Available' : '❌ Not available');
+      console.log('  Secure context:', window.isSecureContext ? '✅ Yes' : '❌ No (requires HTTPS)');
+      console.log('  Browser:', navigator.userAgent);
+
+      if (typeof WebTransport === 'undefined') {
+        const warning = document.createElement('div');
+        warning.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#dc2626;color:white;padding:1rem;text-align:center;z-index:9999;font-weight:bold;';
+        warning.innerHTML = '⚠️ WebTransport not supported in this browser. Downloads will fail.<br>Please use Chrome 97+, Edge 97+, or check Safari Feature Flags (Develop → Feature Flags → WebTransport)';
+        document.body.prepend(warning);
+      } else if (!window.isSecureContext) {
+        const warning = document.createElement('div');
+        warning.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#dc2626;color:white;padding:1rem;text-align:center;z-index:9999;font-weight:bold;';
+        warning.innerHTML = '⚠️ Page must be served over HTTPS for WebTransport to work. Use https://localhost or deploy to HTTPS server.';
+        document.body.prepend(warning);
+      }
+    });
 
     let currentKey = null;
 
@@ -779,14 +803,13 @@
     document.getElementById('btn-download').addEventListener('click', async () => {
       const status = document.getElementById('dl-status');
       const progress = document.getElementById('dl-progress');
-      const objectId = document.getElementById('dl-object-id').value.trim();
-      const shareUrl = document.getElementById('dl-share-url').value.trim();
+      const input = document.getElementById('dl-url').value.trim();
       const filename = document.getElementById('dl-filename').value.trim() || 'download';
 
       progress.style.display = 'none';
       progress.value = 0;
 
-      if (!objectId && !shareUrl) {
+      if (!input) {
         status.innerHTML = '<span class="fail">Enter an Object ID or Share URL</span>';
         return;
       }
@@ -797,28 +820,71 @@
 
         status.innerHTML += '\nFetching object metadata...';
 
-        const obj = shareUrl
-          ? await sdk.sharedObject(shareUrl)
-          : await sdk.object(objectId);
+        // Auto-detect: if starts with sia:// or https://, it's a share URL, otherwise object ID
+        const isShareUrl = input.startsWith('sia://') || input.startsWith('https://');
+        const obj = isShareUrl
+          ? await sdk.sharedObject(input)
+          : await sdk.object(input);
         const size = obj.size();
         status.innerHTML = `Object found: ${formatSize(size)}`;
+
+        // Check if File System Access API is available and warn about large files
+        const hasFileSystemAPI = !!window.showSaveFilePicker;
+        const sizeMB = size / (1024 * 1024);
+
+        if (!hasFileSystemAPI) {
+          const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+          const browserName = isFirefox ? 'Firefox' : 'Your browser';
+
+          status.innerHTML = `<span style="color:#ef4444; font-weight:bold;">❌ ${browserName} doesn't support streaming to disk</span>\n\n` +
+            `File size: ${formatSize(size)}\n\n` +
+            `<strong>This will crash your browser!</strong> Files over ~500MB cannot be downloaded in Firefox because it lacks File System Access API support.\n\n` +
+            `<span style="color:#10b981; font-weight:bold;">✓ Solution: Use Chrome or Edge</span>`;
+          return;
+        }
 
         progress.style.display = 'block';
         status.textContent = 'Downloading...';
 
         const downloadStart = performance.now();
-        let lastProgressUpdate = 0;
-        const PROGRESS_THROTTLE_MS = 100;
+        let bytesDownloaded = 0; // Track actual bytes downloaded
+        let currentSlab = 0;
+        let totalSlabs = 0;
 
-        const progressCb = (current, total) => {
+        // Update progress display
+        const updateProgress = () => {
+          if (totalSlabs === 0) return; // Wait until we know total
+
           const now = performance.now();
-          if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS || current === total) {
-            progress.max = total;
-            progress.value = current;
-            status.textContent = `Downloading... ${current}/${total} slabs`;
-            lastProgressUpdate = now;
-          }
+          progress.max = totalSlabs;
+          progress.value = currentSlab;
+
+          // Calculate metrics using actual bytes downloaded
+          const percentage = ((currentSlab / totalSlabs) * 100).toFixed(1);
+          const elapsed = (now - downloadStart) / 1000; // seconds
+          const speed = bytesDownloaded / elapsed; // bytes per second
+          const remaining = size - bytesDownloaded;
+          const eta = remaining / speed; // seconds
+
+          // Format time helper
+          const formatTime = (seconds) => {
+            if (seconds < 60) return `${seconds.toFixed(0)}s`;
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+          };
+
+          // Format speed
+          const speedMBps = (speed / (1024 * 1024)).toFixed(2);
+
+          // Build status text
+          const line1 = `Downloading... ${currentSlab}/${totalSlabs} slabs (${percentage}%) • ${formatSize(bytesDownloaded)} / ${formatSize(size)}`;
+          const line2 = `${speedMBps} MB/s • ${formatTime(elapsed)} elapsed • ~${formatTime(eta)} remaining`;
+          status.textContent = `${line1}\n${line2}`;
         };
+
+        // Force updates every 100ms for smooth real-time display
+        const progressInterval = setInterval(updateProgress, 100);
 
         // Use the File System Access API to stream directly to disk when
         // available (Chrome/Edge). Chunks are batched per slab (~40 MB) and
@@ -837,8 +903,12 @@
               (chunk) => {
                 // chunk is already a JS-owned copy from Rust — no extra copy needed
                 slabChunks.push(chunk);
+                bytesDownloaded += chunk.length; // Track actual bytes
               },
               (current, total) => {
+                // Update slab tracking (setInterval will pick this up)
+                currentSlab = current;
+                totalSlabs = total;
                 // Flush accumulated chunks to disk as one Blob per slab
                 if (slabChunks.length > 0) {
                   const blob = new Blob(slabChunks);
@@ -847,7 +917,6 @@
                   // means at most a few slabs of data are held in memory.
                   lastWrite = lastWrite.then(() => writable.write(blob));
                 }
-                progressCb(current, total);
               },
             );
             // Flush any remaining buffered data
@@ -866,8 +935,14 @@
           // Fallback: accumulate in memory (works everywhere, but limited by RAM)
           const blobParts = [];
           await sdk.downloadStreaming(obj,
-            (chunk) => { blobParts.push(chunk); },
-            progressCb,
+            (chunk) => {
+              blobParts.push(chunk);
+              bytesDownloaded += chunk.length; // Track actual bytes
+            },
+            (current, total) => {
+              currentSlab = current;
+              totalSlabs = total;
+            },
           );
           const blob = new Blob(blobParts);
           const a = document.createElement('a');
@@ -877,10 +952,12 @@
           URL.revokeObjectURL(a.href);
         }
 
+        clearInterval(progressInterval); // Stop progress updates
         const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
         progress.value = progress.max;
         status.innerHTML = `File: ${filename}\nSize: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Saved to disk!</span>`;
       } catch (e) {
+        clearInterval(progressInterval); // Stop progress updates on error
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
     });
@@ -958,18 +1035,39 @@
     // Load history when page loads
     loadHistoryFromStorage();
 
+    // If history is empty, add the welcome page to history
+    if (browserHistory.length === 0) {
+      const welcomeUrl = 'sia://app.sia.storage/objects/20a4f56e14c0cf3a3e010370bceb5e665cf997ca8acbd1c7c2e5543bfe0da499/shared?sv=1785641173&sc=nmS95u9mPXfFkjj8fkVfCw28mgyVgq9IQOUQYBykQNs%3D&ss=NrjLZkHG8kCKBUdIOcqhlRriIOED_gCjIi_cn9HSwGCPwbCKDJAXZow7f8FYf4govWHC2M25n9EgPQZlz9eKDA%3D%3D#encryption_key=zdDhoRMpzziTJ7xPD1_Cy3QN0pZtuyg_1ElWPopvIRM=';
+
+      // Add welcome page to history (without blob URL - user will click to load)
+      browserHistory.push({
+        displayUrl: welcomeUrl,
+        blobUrl: null,
+        title: 'Welcome to Sia Browser',
+        external: false,
+        originalUrl: welcomeUrl,
+        fileType: 'html'
+      });
+
+      currentHistoryIndex = 0;
+      updateBrowserUI();
+      saveHistoryToStorage();
+
+      console.log('📄 Welcome page added to history');
+    }
+
     function updateBrowserUI() {
       const addressBar = document.getElementById('address-bar');
       const historyList = document.getElementById('history-list');
 
-      // Update address bar
+      // Update address bar with raw URL (so user can click Go or External Tab)
       if (currentHistoryIndex >= 0 && browserHistory[currentHistoryIndex]) {
         const current = browserHistory[currentHistoryIndex];
-        addressBar.value = current.displayUrl;
-        addressBar.title = current.displayUrl;
+        addressBar.value = current.originalUrl || current.displayUrl;
+        addressBar.title = current.displayUrl; // Tooltip shows formatted version
       } else {
         addressBar.value = '';
-        addressBar.placeholder = 'Enter Sia share URL or object ID...';
+        addressBar.placeholder = 'Paste Sia share URL or object ID...';
       }
 
       // Update history list
@@ -985,11 +1083,70 @@
         const isPdf = item.displayUrl && item.displayUrl.startsWith('PDF:');
         const showWarning = item.external && !isPdf;
 
-        historyItem.textContent = (showWarning ? '⚠️ ' : '') + (item.title || item.displayUrl);
+        const itemText = (showWarning ? '⚠️ ' : '') + (item.title || item.displayUrl);
+        historyItem.innerHTML = `
+          <span class="history-title">${itemText}</span>
+          <button class="history-delete" style="opacity: 0; transition: opacity 0.2s; background: none; border: none; color: #ef4444; cursor: pointer; padding: 0 0.5rem; font-size: 1.2rem; line-height: 1;" title="Delete">×</button>
+        `;
         historyItem.title = (showWarning ? '[External Tab] ' : '') + item.displayUrl;
-        historyItem.addEventListener('click', () => navigateToHistory(index));
+
+        // Show delete button on hover
+        historyItem.addEventListener('mouseenter', () => {
+          const deleteBtn = historyItem.querySelector('.history-delete');
+          if (deleteBtn) deleteBtn.style.opacity = '1';
+        });
+        historyItem.addEventListener('mouseleave', () => {
+          const deleteBtn = historyItem.querySelector('.history-delete');
+          if (deleteBtn) deleteBtn.style.opacity = '0';
+        });
+
+        // Navigate on title click
+        historyItem.querySelector('.history-title').addEventListener('click', () => navigateToHistory(index));
+
+        // Delete on X click
+        historyItem.querySelector('.history-delete').addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteHistoryItem(index);
+        });
+
         historyList.appendChild(historyItem);
       });
+    }
+
+    function deleteHistoryItem(index) {
+      if (index < 0 || index >= browserHistory.length) return;
+
+      // Revoke the blob URL to free memory
+      const item = browserHistory[index];
+      if (item.blobUrl && item.blobUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(item.blobUrl);
+      }
+
+      // Remove the item
+      browserHistory.splice(index, 1);
+
+      // Update current index
+      if (currentHistoryIndex === index) {
+        // Deleted the current item - move to previous or clear
+        currentHistoryIndex = Math.max(0, index - 1);
+        if (browserHistory.length === 0) {
+          currentHistoryIndex = -1;
+          // Clear the iframe
+          const iframe = document.getElementById('html-iframe');
+          const videoContainer = document.getElementById('video-container');
+          const video = document.getElementById('mse-video');
+          iframe.src = '';
+          iframe.style.display = 'block';
+          videoContainer.style.display = 'none';
+          video.src = '';
+        }
+      } else if (currentHistoryIndex > index) {
+        // Deleted an item before the current - adjust index
+        currentHistoryIndex--;
+      }
+
+      updateBrowserUI();
+      saveHistoryToStorage();
     }
 
     async function navigateToHistory(index) {
@@ -1008,8 +1165,16 @@
       if (item.external) {
         window.open(item.blobUrl, '_blank');
       } else {
-        // Load in iframe
+        // Show iframe, hide video
         const iframe = document.getElementById('html-iframe');
+        const videoContainer = document.getElementById('video-container');
+        const video = document.getElementById('mse-video');
+
+        iframe.style.display = 'block';
+        videoContainer.style.display = 'none';
+        video.src = ''; // Clear video source
+
+        // Load in iframe
         iframe.src = item.blobUrl;
       }
       updateBrowserUI();
@@ -1101,9 +1266,13 @@
       );
 
       if (existingIndex !== -1) {
-        // URL already exists - navigate to that tab instead
-        console.log(`📍 URL already exists at index ${existingIndex}, navigating there`);
-        navigateToHistory(existingIndex);
+        // URL already exists - update it with the new blob URL
+        console.log(`📍 URL already exists at index ${existingIndex}, updating blob URL`);
+        browserHistory[existingIndex].blobUrl = blobUrl;
+        browserHistory[existingIndex].title = title || displayUrl;
+        currentHistoryIndex = existingIndex;
+        updateBrowserUI();
+        saveHistoryToStorage();
         return;
       }
 
@@ -1128,46 +1297,10 @@
       saveHistoryToStorage();
     }
 
-    // Address bar navigation (Enter key)
+    // Address bar navigation (Enter key) - uses auto-detection
     document.getElementById('address-bar').addEventListener('keypress', async (e) => {
       if (e.key === 'Enter') {
-        const url = e.target.value.trim();
-        if (!url) return;
-
-        const status = document.getElementById('iframe-status');
-        const progress = document.getElementById('iframe-progress');
-        const iframe = document.getElementById('html-iframe');
-        const browserNav = document.getElementById('browser-nav');
-        const browserContainer = document.getElementById('browser-container');
-
-        progress.style.display = 'none';
-        progress.value = 0;
-
-        try {
-          const sdk = await connectSdk(status);
-          if (!sdk) return;
-
-          status.textContent = 'Fetching object...';
-          // Check if it's a share URL or object ID
-          const obj = url.startsWith('sia://')
-            ? await sdk.sharedObject(url)
-            : await sdk.object(url);
-          const size = obj.size();
-
-          const { blob, elapsed } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
-
-          // Load into iframe (let browser detect content type)
-          const blobUrl = URL.createObjectURL(blob);
-          iframe.src = blobUrl;
-
-          // Add to history
-          const displayUrl = url.startsWith('sia://') ? url : `object://${url}`;
-          addToHistory(displayUrl, blobUrl, displayUrl, false, url, 'html');
-
-          status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">Page loaded!</span>`;
-        } catch (e) {
-          status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
-        }
+        loadContentWithAutoDetect();
       }
     });
 
@@ -1279,22 +1412,175 @@
       }
     }
 
-    // File type buttons
-    document.getElementById('btn-load-html').addEventListener('click', () => loadContentAs('text/html', 'HTML'));
-    document.getElementById('btn-load-pdf').addEventListener('click', loadPdfInNewTab);
-    document.getElementById('btn-load-image').addEventListener('click', () => loadContentAs('image/jpeg', 'Image'));
-    document.getElementById('btn-load-video').addEventListener('click', () => loadContentAs('video/mp4', 'Video'));
-    document.getElementById('btn-load-audio').addEventListener('click', () => loadContentAs('audio/mpeg', 'Audio'));
-    document.getElementById('btn-load-text').addEventListener('click', () => loadContentAs('text/plain', 'Text'));
+    // Progressive video streaming using Media Source Extensions
+    async function streamVideo(sdk, obj, mimeType, status, progress) {
+      // TODO: MSE requires proper MP4 initialization segments (moov/ftyp boxes)
+      // The raw slab data doesn't have the correct MP4 structure for MSE
+      // For now, disable MSE - full download works reliably
+      console.log('⚠️  MSE disabled (needs MP4 fragmentation) - using full download');
+      return null;
 
-    // Open in external tab (with warning)
-    document.getElementById('btn-external-tab').addEventListener('click', async () => {
-      // Show warning first
-      const confirmed = confirm('⚠️ WARNING: This will allow the downloaded page to execute JavaScript!\n\nOpening content in an external tab removes all sandbox protections. Only proceed if you trust the content.\n\nUse the HTML button if the content is untrusted.');
+      /* Disabled until we can generate proper fragmented MP4
+      if (!window.MediaSource) {
+        console.log('MSE not available - falling back to full download');
+        return null;
+      }
 
-      if (!confirmed) return;
+      // Test codec support BEFORE creating MediaSource
+      const codecStrings = [
+        'video/mp4; codecs="avc1.42E01E, mp4a.40.2"', // H.264 Baseline + AAC-LC
+        'video/mp4; codecs="avc1.640028, mp4a.40.2"', // H.264 High + AAC-LC
+        'video/mp4; codecs="avc1.64001F, mp4a.40.2"', // H.264 High 3.1
+        'video/mp4; codecs="hvc1.1.6.L153.B0, mp4a.40.2"', // HEVC Main + AAC
+        'video/mp4; codecs="hev1.1.6.L153.B0, mp4a.40.2"', // HEVC alternative
+      ];
 
-      // Check if there's a URL in the address bar
+      console.log('🔍 Testing codec support...');
+      let selectedCodec = null;
+      for (const codec of codecStrings) {
+        const isSupported = MediaSource.isTypeSupported(codec);
+        console.log(`  ${isSupported ? '✅' : '❌'} ${codec}`);
+        if (isSupported && !selectedCodec) {
+          selectedCodec = codec;
+        }
+      }
+
+      if (!selectedCodec) {
+        console.log('❌ No supported codec - falling back');
+        return null;
+      }
+
+      console.log('✨ Will use codec:', selectedCodec);
+
+      // Now create MediaSource
+      return new Promise((resolve, reject) => {
+        const mediaSource = new MediaSource();
+        const videoUrl = URL.createObjectURL(mediaSource);
+
+        // CRITICAL: Attach to video element BEFORE waiting for sourceopen
+        // The sourceopen event won't fire until the video starts loading the MediaSource
+        const video = document.getElementById('mse-video');
+        const videoContainer = document.getElementById('video-container');
+        const iframe = document.getElementById('html-iframe');
+
+        // Show video, hide iframe
+        iframe.style.display = 'none';
+        videoContainer.style.display = 'block';
+        video.src = videoUrl; // This triggers sourceopen!
+        console.log('📺 Video element attached, waiting for sourceopen...');
+
+        let sourceBuffer = null;
+        let downloadComplete = false;
+        let appendQueue = [];
+        let isAppending = false;
+
+        mediaSource.addEventListener('sourceopen', async () => {
+          console.log('✅ MediaSource opened!');
+          try {
+            sourceBuffer = mediaSource.addSourceBuffer(selectedCodec);
+            console.log('🎬 SourceBuffer created, starting download...')
+
+            // Process append queue when buffer is ready
+            sourceBuffer.addEventListener('updateend', () => {
+              isAppending = false;
+              processQueue();
+            });
+
+            sourceBuffer.addEventListener('error', (e) => {
+              console.error('SourceBuffer error:', e);
+              reject(new Error('SourceBuffer error'));
+            });
+
+            // Start downloading
+            const chunks = [];
+            await sdk.downloadStreaming(obj,
+              (chunk) => {
+                // Accumulate chunks for current slab
+                chunks.push(chunk);
+              },
+              (current, total) => {
+                // On slab completion, queue the slab data for append
+                if (chunks.length > 0) {
+                  const slabData = new Uint8Array(
+                    chunks.reduce((acc, c) => acc + c.length, 0)
+                  );
+                  let offset = 0;
+                  for (const chunk of chunks) {
+                    slabData.set(chunk, offset);
+                    offset += chunk.length;
+                  }
+                  appendQueue.push(slabData);
+                  chunks.length = 0;
+                  processQueue();
+                }
+
+                // Update progress
+                progress.max = total;
+                progress.value = current;
+                status.textContent = `Streaming video... ${current}/${total} slabs`;
+              }
+            );
+
+            // Append any remaining chunks
+            if (chunks.length > 0) {
+              const slabData = new Uint8Array(
+                chunks.reduce((acc, c) => acc + c.length, 0)
+              );
+              let offset = 0;
+              for (const chunk of chunks) {
+                slabData.set(chunk, offset);
+                offset += chunk.length;
+              }
+              appendQueue.push(slabData);
+              chunks.length = 0;
+            }
+
+            downloadComplete = true;
+            processQueue();
+
+            resolve({ videoUrl, mediaSource });
+
+          } catch (error) {
+            console.error('MSE setup error:', error);
+            reject(error);
+          }
+        });
+
+        function processQueue() {
+          if (isAppending || !sourceBuffer || appendQueue.length === 0) {
+            // Check if we're done
+            if (downloadComplete && appendQueue.length === 0 && !isAppending) {
+              if (mediaSource.readyState === 'open') {
+                mediaSource.endOfStream();
+                console.log('Video streaming complete');
+              }
+            }
+            return;
+          }
+
+          const data = appendQueue.shift();
+          isAppending = true;
+
+          try {
+            sourceBuffer.appendBuffer(data);
+          } catch (e) {
+            console.error('appendBuffer error:', e);
+            isAppending = false;
+            // Try again after a delay
+            setTimeout(() => processQueue(), 100);
+          }
+        }
+
+        mediaSource.addEventListener('error', (e) => {
+          console.error('MediaSource error:', e);
+          reject(new Error('MediaSource error'));
+        });
+      });
+      */
+    }
+
+    // Auto-detect file type using MIME sniffing
+    async function loadContentWithAutoDetect() {
       const addressBar = document.getElementById('address-bar');
       const url = addressBar.value.trim();
 
@@ -1304,8 +1590,183 @@
         return;
       }
 
-      // Download and open in new tab
       const status = document.getElementById('iframe-status');
+      const progress = document.getElementById('iframe-progress');
+      const iframe = document.getElementById('html-iframe');
+      const videoContainer = document.getElementById('video-container');
+      const video = document.getElementById('mse-video');
+
+      // Reset display: show iframe, hide video
+      iframe.style.display = 'block';
+      videoContainer.style.display = 'none';
+      video.src = '';
+
+      progress.style.display = 'none';
+      progress.value = 0;
+
+      try {
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
+
+        status.textContent = 'Fetching object...';
+        const obj = url.startsWith('sia://')
+          ? await sdk.sharedObject(url)
+          : await sdk.object(url);
+        const size = obj.size();
+
+        // Since we're not doing progressive streaming (MSE disabled),
+        // just download the entire file first, then detect type
+        status.textContent = 'Downloading...';
+        const result = await streamingDownload(sdk, obj, status, progress, 'Downloading');
+        const downloadedBlob = result.blob;
+
+        // Detect type from the full file
+        status.textContent = 'Detecting file type...';
+        const detectedType = await fileTypeFromBlob(downloadedBlob);
+
+        let mimeType = 'application/octet-stream';
+        let typeLabel = 'Unknown';
+        let fileType = 'unknown';
+
+        if (detectedType) {
+          mimeType = detectedType.mime;
+          typeLabel = detectedType.ext.toUpperCase();
+
+          // Categorize for history tracking
+          if (mimeType.startsWith('image/')) {
+            fileType = 'image';
+            typeLabel = 'Image';
+          } else if (mimeType.startsWith('video/')) {
+            fileType = 'video';
+            typeLabel = 'Video';
+          } else if (mimeType.startsWith('audio/')) {
+            fileType = 'audio';
+            typeLabel = 'Audio';
+          } else if (mimeType === 'application/pdf') {
+            fileType = 'pdf';
+            typeLabel = 'PDF';
+          } else if (mimeType === 'text/html') {
+            fileType = 'html';
+            typeLabel = 'HTML';
+          } else if (mimeType.startsWith('text/')) {
+            fileType = 'text';
+            typeLabel = 'Text';
+          }
+
+          status.textContent = `Detected: ${mimeType} (${detectedType.ext})`;
+          console.log('🔍 Type detected:', { mimeType, typeLabel, fileType, ext: detectedType.ext });
+        } else {
+          // Fallback: try to detect text by checking if it's valid UTF-8
+          try {
+            const sample = await downloadedBlob.slice(0, 1024).arrayBuffer();
+            const text = new TextDecoder('utf-8', { fatal: true }).decode(sample);
+            // If we got here, it's valid UTF-8 text
+            if (text.includes('<html') || text.includes('<!DOCTYPE')) {
+              mimeType = 'text/html';
+              typeLabel = 'HTML';
+              fileType = 'html';
+            } else {
+              mimeType = 'text/plain';
+              typeLabel = 'Text';
+              fileType = 'text';
+            }
+            status.textContent = `Detected: ${typeLabel} (fallback UTF-8 detection)`;
+          } catch {
+            // Not text, treat as binary
+            status.textContent = 'Could not detect file type, treating as binary';
+          }
+        }
+
+        // Create blob with appropriate wrapper for better display
+        let blobUrl;
+        const downloadStart = performance.now();
+
+        if (fileType === 'video') {
+          // Create video player HTML with the already-downloaded blob
+          const videoBlob = new Blob([downloadedBlob], { type: mimeType });
+          const videoUrl = URL.createObjectURL(videoBlob);
+          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0;font-family:system-ui,sans-serif;padding:2rem;}video{width:100%;max-width:1200px;background:#000;}</style></head><body><h2 style="margin-bottom:1rem;">🎬 Video Player</h2><video controls autoplay><source src="${videoUrl}" type="${mimeType}">Your browser does not support the video element.</video><p style="margin-top:1rem;color:#888;">File size: ${formatSize(size)} | Type: ${mimeType}</p></body></html>`;
+          const blob = new Blob([html], { type: 'text/html' });
+          blobUrl = URL.createObjectURL(blob);
+
+        } else if (fileType === 'text') {
+          // Decode text from the already-downloaded blob
+          const text = new TextDecoder().decode(new Uint8Array(await downloadedBlob.arrayBuffer()));
+          const escapedText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:'Courier New',monospace;padding:1.5rem;background:#0a0a0a;color:#e0e0e0;margin:0;}pre{white-space:pre-wrap;word-wrap:break-word;margin:0;line-height:1.5;}</style></head><body><pre>${escapedText}</pre></body></html>`;
+          const blob = new Blob([html], { type: 'text/html' });
+          blobUrl = URL.createObjectURL(blob);
+
+        } else if (fileType === 'audio') {
+          const audioBlob = new Blob([downloadedBlob], { type: mimeType });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0;font-family:system-ui,sans-serif;}audio{width:90%;max-width:600px;}</style></head><body><h2 style="margin-bottom:2rem;">🎵 Audio Player</h2><audio controls autoplay><source src="${audioUrl}" type="${mimeType}">Your browser does not support the audio element.</audio></body></html>`;
+          const blob = new Blob([html], { type: 'text/html' });
+          blobUrl = URL.createObjectURL(blob);
+
+        } else if (fileType === 'pdf') {
+          const pdfBlob = new Blob([downloadedBlob], { type: 'application/pdf' });
+          blobUrl = URL.createObjectURL(pdfBlob);
+          window.open(blobUrl, '_blank');
+
+          const displayUrl = `PDF: ${url}`;
+          addToHistory(displayUrl, blobUrl, displayUrl, true, url, 'pdf');
+
+          const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+          status.innerHTML = `Size: ${formatSize(size)}\nDetected: ${mimeType}\nLoaded in ${elapsed}s\n<span class="pass">PDF opened in new tab!</span>`;
+          return;
+
+        } else {
+          // For other types (image, html, unknown), load directly
+          blobUrl = URL.createObjectURL(new Blob([downloadedBlob], { type: mimeType }));
+        }
+
+        console.log(`🎬 LINE 1712 - Setting iframe.src for ${fileType} (non-MSE path)`);
+        iframe.src = blobUrl;
+
+        const displayUrl = `${typeLabel}: ${url}`;
+        addToHistory(displayUrl, blobUrl, displayUrl, false, url, fileType);
+
+        const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+        status.innerHTML = `Size: ${formatSize(size)}\nDetected: ${mimeType}\nLoaded in ${elapsed}s\n<span class="pass">${typeLabel} loaded!</span>`;
+      } catch (e) {
+        status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
+      }
+    }
+
+    // Go button - auto-detects file type
+    document.getElementById('btn-go').addEventListener('click', loadContentWithAutoDetect);
+
+    // Open in external tab (with warning)
+    document.getElementById('btn-external-tab').addEventListener('click', async () => {
+      // Show warning first
+      const confirmed = confirm('⚠️ WARNING: This will allow the downloaded page to execute JavaScript!\n\nOpening content in an external tab removes all sandbox protections. Only proceed if you trust the content.\n\nUse the Go button (sandboxed iframe) for untrusted content.');
+
+      if (!confirmed) return;
+
+      const status = document.getElementById('iframe-status');
+
+      // Check if we have a current history item with blob URL - reuse it!
+      if (currentHistoryIndex >= 0 && browserHistory[currentHistoryIndex]) {
+        const currentItem = browserHistory[currentHistoryIndex];
+        if (currentItem.blobUrl) {
+          console.log('Reusing already-downloaded blob for external tab');
+          window.open(currentItem.blobUrl, '_blank');
+          status.innerHTML = '<span class="pass">✓ Opened in external tab (reused downloaded file)!</span>';
+          return;
+        }
+      }
+
+      // No current blob URL - need to download from address bar
+      const addressBar = document.getElementById('address-bar');
+      const url = addressBar.value.trim();
+
+      if (!url) {
+        status.innerHTML = '<span style="color:#f59e0b">⚠️ Enter a URL in the address bar first.</span>';
+        return;
+      }
+
+      // Download and open in new tab
       const progress = document.getElementById('iframe-progress');
 
       progress.style.display = 'none';
@@ -1322,16 +1783,52 @@
 
         const { blob: downloadedBlob } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
 
-        // Open in external tab with HTML content type
-        const blob = new Blob([downloadedBlob], { type: 'text/html' });
+        // Detect MIME type
+        status.textContent = 'Detecting file type...';
+        const detectedType = await fileTypeFromBlob(downloadedBlob);
+
+        let mimeType = 'application/octet-stream';
+        let fileType = 'external';
+
+        if (detectedType) {
+          mimeType = detectedType.mime;
+          console.log('External tab - detected MIME type:', mimeType);
+
+          // Categorize for history
+          if (mimeType.startsWith('image/')) fileType = 'image';
+          else if (mimeType.startsWith('video/')) fileType = 'video';
+          else if (mimeType.startsWith('audio/')) fileType = 'audio';
+          else if (mimeType === 'application/pdf') fileType = 'pdf';
+          else if (mimeType === 'text/html') fileType = 'html';
+          else if (mimeType.startsWith('text/')) fileType = 'text';
+        } else {
+          // Fallback: check if it's valid UTF-8 text
+          try {
+            const sample = await downloadedBlob.slice(0, 1024).arrayBuffer();
+            const text = new TextDecoder('utf-8', { fatal: true }).decode(sample);
+            if (text.includes('<html') || text.includes('<!DOCTYPE')) {
+              mimeType = 'text/html';
+              fileType = 'html';
+            } else {
+              mimeType = 'text/plain';
+              fileType = 'text';
+            }
+          } catch {
+            // Binary file, use default
+            console.log('External tab - could not detect type, using default');
+          }
+        }
+
+        // Open in external tab with detected MIME type
+        const blob = new Blob([downloadedBlob], { type: mimeType });
         const blobUrl = URL.createObjectURL(blob);
         window.open(blobUrl, '_blank');
 
         // Add to history with external flag
-        const displayUrl = `External: ${url}`;
-        addToHistory(displayUrl, blobUrl, displayUrl, true, url, 'external');
+        const displayUrl = `External (${fileType}): ${url}`;
+        addToHistory(displayUrl, blobUrl, displayUrl, true, url, fileType);
 
-        status.innerHTML = '<span class="pass">✓ Opened in external tab!</span>';
+        status.innerHTML = `<span class="pass">✓ Opened in external tab as ${mimeType}!</span>`;
       } catch (e) {
         status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
       }
