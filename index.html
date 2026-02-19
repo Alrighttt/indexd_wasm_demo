@@ -1,56 +1,302 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>indexd WASM Demo</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 2rem; max-width: 800px; margin: 0 auto; }
-    h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #fff; }
-    h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #b0b0b0; }
-    section { background: #151515; border: 1px solid #2a2a2a; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem; }
-    button { background: #1a6b3c; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; }
-    button:hover { background: #1f8148; }
-    button:disabled { background: #333; color: #666; cursor: not-allowed; }
-    input, textarea { background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; border-radius: 4px; padding: 0.5rem; width: 100%; font-family: monospace; font-size: 0.8rem; }
-    textarea { resize: vertical; min-height: 3rem; }
-    .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
-    .output { background: #0d0d0d; border: 1px solid #222; border-radius: 4px; padding: 0.75rem; margin-top: 0.75rem; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; min-height: 2rem; }
-    .label { font-size: 0.75rem; color: #888; margin-bottom: 0.25rem; }
-    .pass { color: #4ade80; }
-    .fail { color: #f87171; }
-    #loading { text-align: center; padding: 2rem; color: #888; }
-    #app { display: none; }
-    .dropzone { border: 2px dashed #333; border-radius: 8px; padding: 2rem; text-align: center; color: #666; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
-    .dropzone:hover, .dropzone.dragover { border-color: #1a6b3c; color: #4ade80; }
-    .dropzone .file-info { color: #e0e0e0; font-size: 0.85rem; margin-top: 0.5rem; }
-    hr { border: none; border-top: 1px solid #2a2a2a; margin: 1rem 0; }
-    progress { width: 100%; height: 8px; appearance: none; border: none; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
-    progress::-webkit-progress-bar { background: #1a1a1a; border-radius: 4px; }
-    progress::-webkit-progress-value { background: #1a6b3c; border-radius: 4px; }
-    progress::-moz-progress-bar { background: #1a6b3c; border-radius: 4px; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      padding: 2rem;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      color: #fff;
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+      color: #b0b0b0;
+    }
+
+    section {
+      background: #151515;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    button {
+      background: #1a6b3c;
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+
+    button:hover {
+      background: #1f8148;
+    }
+
+    button:disabled {
+      background: #333;
+      color: #666;
+      cursor: not-allowed;
+    }
+
+    input,
+    textarea {
+      background: #1a1a1a;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 0.5rem;
+      width: 100%;
+      font-family: monospace;
+      font-size: 0.8rem;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 3rem;
+    }
+
+    .row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .output {
+      background: #0d0d0d;
+      border: 1px solid #222;
+      border-radius: 4px;
+      padding: 0.75rem;
+      margin-top: 0.75rem;
+      font-family: monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      min-height: 2rem;
+    }
+
+    .label {
+      font-size: 0.75rem;
+      color: #888;
+      margin-bottom: 0.25rem;
+    }
+
+    .pass {
+      color: #4ade80;
+    }
+
+    .fail {
+      color: #f87171;
+    }
+
+    #loading {
+      text-align: center;
+      padding: 2rem;
+      color: #888;
+    }
+
+    #app {
+      display: none;
+    }
+
+    .dropzone {
+      border: 2px dashed #333;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      color: #666;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .dropzone:hover,
+    .dropzone.dragover {
+      border-color: #1a6b3c;
+      color: #4ade80;
+    }
+
+    .dropzone .file-info {
+      color: #e0e0e0;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #2a2a2a;
+      margin: 1rem 0;
+    }
+
+    progress {
+      width: 100%;
+      height: 8px;
+      appearance: none;
+      border: none;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+
+    progress::-webkit-progress-bar {
+      background: #1a1a1a;
+      border-radius: 4px;
+    }
+
+    progress::-webkit-progress-value {
+      background: #1a6b3c;
+      border-radius: 4px;
+    }
+
+    progress::-moz-progress-bar {
+      background: #1a6b3c;
+      border-radius: 4px;
+    }
 
     /* Browser Navigation Controls */
-    .browser-nav { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem; padding: 0.5rem; background: #0d0d0d; border: 1px solid #222; border-radius: 4px; }
-    .browser-nav-row { display: flex; gap: 0.5rem; align-items: center; }
-    .browser-nav button { padding: 0.4rem 0.75rem; font-size: 0.8rem; min-width: auto; }
-    .browser-nav .address-bar { flex: 1; background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 0.4rem 0.6rem; font-family: monospace; font-size: 0.75rem; color: #ddd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .browser-nav .address-bar:focus { outline: none; border-color: #667eea; background: #222; }
-    .browser-container { display: flex; gap: 1rem; margin-top: 1rem; }
-    .browser-main { flex: 1; min-width: 0; }
-    .browser-history { width: 200px; background: #0d0d0d; border: 1px solid #222; border-radius: 4px; padding: 0.75rem; max-height: 600px; overflow-y: auto; }
-    .browser-history h3 { font-size: 0.85rem; color: #b0b0b0; margin-bottom: 0.5rem; }
-    .history-item { font-size: 0.75rem; padding: 0.4rem; margin-bottom: 0.25rem; background: #151515; border: 1px solid #2a2a2a; border-radius: 4px; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; gap: 0.5rem; }
-    .history-item:hover { background: #1a1a1a; }
-    .history-item.active { background: #1a6b3c; border-color: #1f8148; }
-    .history-item.downloaded { background: #0d3d20; border-color: #1a6b3c; }
-    .history-item.downloaded:hover { background: #114d28; }
-    .history-item.active.downloaded { background: #1a6b3c; border-color: #1f8148; }
-    .history-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; cursor: pointer; }
-    .history-delete { flex-shrink: 0; }
+    .browser-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      padding: 0.5rem;
+      background: #0d0d0d;
+      border: 1px solid #222;
+      border-radius: 4px;
+    }
+
+    .browser-nav-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .browser-nav button {
+      padding: 0.4rem 0.75rem;
+      font-size: 0.8rem;
+      min-width: auto;
+    }
+
+    .browser-nav .address-bar {
+      flex: 1;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 0.4rem 0.6rem;
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: #ddd;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .browser-nav .address-bar:focus {
+      outline: none;
+      border-color: #667eea;
+      background: #222;
+    }
+
+    .browser-container {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .browser-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .browser-history {
+      width: 200px;
+      background: #0d0d0d;
+      border: 1px solid #222;
+      border-radius: 4px;
+      padding: 0.75rem;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+
+    .browser-history h3 {
+      font-size: 0.85rem;
+      color: #b0b0b0;
+      margin-bottom: 0.5rem;
+    }
+
+    .history-item {
+      font-size: 0.75rem;
+      padding: 0.4rem;
+      margin-bottom: 0.25rem;
+      background: #151515;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .history-item:hover {
+      background: #1a1a1a;
+    }
+
+    .history-item.active {
+      background: #1a6b3c;
+      border-color: #1f8148;
+    }
+
+    .history-item.downloaded {
+      background: #0d3d20;
+      border-color: #1a6b3c;
+    }
+
+    .history-item.downloaded:hover {
+      background: #114d28;
+    }
+
+    .history-item.active.downloaded {
+      background: #1a6b3c;
+      border-color: #1f8148;
+    }
+
+    .history-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      cursor: pointer;
+    }
+
+    .history-delete {
+      flex-shrink: 0;
+    }
   </style>
 </head>
+
 <body>
   <h1>indexd WASM Demo</h1>
 
@@ -70,24 +316,31 @@
       </div>
       <div id="performance-section" style="display:none;">
         <div style="display:flex; gap:0.5rem; margin-bottom:0.75rem; margin-top:0.5rem;">
-          <button id="preset-conservative" style="flex:1; padding:0.6rem; background:#10b981; color:white; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">
+          <button id="preset-conservative"
+            style="flex:1; padding:0.6rem; background:#10b981; color:white; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">
             🐢 Conservative<br><span style="font-size:0.7rem; opacity:0.9;">Most Stable</span>
           </button>
-          <button id="preset-balanced" style="flex:1; padding:0.6rem; background:#3b82f6; color:white; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">
+          <button id="preset-balanced"
+            style="flex:1; padding:0.6rem; background:#3b82f6; color:white; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">
             ⚖️ Balanced<br><span style="font-size:0.7rem; opacity:0.9;">Recommended</span>
           </button>
-          <button id="preset-fast" style="flex:1; padding:0.6rem; background:#f59e0b; color:white; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">
+          <button id="preset-fast"
+            style="flex:1; padding:0.6rem; background:#f59e0b; color:white; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">
             🚀 Fast<br><span style="font-size:0.7rem; opacity:0.9;">May Be Unstable</span>
           </button>
         </div>
         <div class="label" style="margin-top:0.5rem;">Concurrency Limits</div>
-        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:0.5rem; align-items:center; margin-bottom:0.5rem;">
+        <div
+          style="display:grid; grid-template-columns: 2fr 1fr; gap:0.5rem; align-items:center; margin-bottom:0.5rem;">
           <label style="font-size:0.85rem; color:#999;">Max Price Fetches:</label>
-          <input id="cfg-max-price-fetches" type="number" min="1" max="10" value="10" style="padding:0.4rem; text-align:center;" />
+          <input id="cfg-max-price-fetches" type="number" min="1" max="10" value="10"
+            style="padding:0.4rem; text-align:center;" />
           <label style="font-size:0.85rem; color:#999;">Max Downloads:</label>
-          <input id="cfg-max-downloads" type="number" min="1" max="20" value="20" style="padding:0.4rem; text-align:center;" />
+          <input id="cfg-max-downloads" type="number" min="1" max="20" value="20"
+            style="padding:0.4rem; text-align:center;" />
           <label style="font-size:0.85rem; color:#999;">Max Uploads:</label>
-          <input id="cfg-max-uploads" type="number" min="1" max="20" value="16" style="padding:0.4rem; text-align:center;" />
+          <input id="cfg-max-uploads" type="number" min="1" max="20" value="16"
+            style="padding:0.4rem; text-align:center;" />
         </div>
         <div style="font-size:0.75rem; color:#999; margin-bottom:0.75rem; line-height:1.4;">
           💡 Lower = more stable, higher = faster. Changes require reconnecting SDK.
@@ -149,8 +402,11 @@
           <span style="font-weight:500;">Storage Usage</span>
           <span id="account-storage-text" style="color:#888; font-size:0.9rem;">Loading...</span>
         </div>
-        <div style="width:100%; height:24px; background:#0a0a0a; border-radius:6px; overflow:hidden; border:1px solid #222;">
-          <div id="account-storage-bar" style="width:0%; height:100%; background:linear-gradient(90deg, #10b981, #059669); transition:width 0.3s;"></div>
+        <div
+          style="width:100%; height:24px; background:#0a0a0a; border-radius:6px; overflow:hidden; border:1px solid #222;">
+          <div id="account-storage-bar"
+            style="width:0%; height:100%; background:linear-gradient(90deg, #10b981, #059669); transition:width 0.3s;">
+          </div>
         </div>
         <div style="display:flex; justify-content:space-between; margin-top:0.25rem; font-size:0.85rem; color:#666;">
           <span id="account-used-label">Used: 0 GB</span>
@@ -164,7 +420,8 @@
               <div style="font-weight:500; margin-bottom:0.25rem; color:#e0e0e0;">Clean Up Storage</div>
               <div style="color:#888; font-size:0.85rem;">Remove unused slabs to reclaim space</div>
             </div>
-            <button id="btn-prune-slabs" style="padding:0.5rem 1rem; background:#8b5cf6; color:white; border:none; border-radius:4px; cursor:pointer; white-space:nowrap; font-size:0.9rem; font-weight:500;">
+            <button id="btn-prune-slabs"
+              style="padding:0.5rem 1rem; background:#8b5cf6; color:white; border:none; border-radius:4px; cursor:pointer; white-space:nowrap; font-size:0.9rem; font-weight:500;">
               🧹 Prune Slabs
             </button>
           </div>
@@ -172,7 +429,8 @@
       </div>
 
       <!-- Quick Stats Grid -->
-      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+      <div
+        style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
         <div style="background:#0a0a0a; padding:1.25rem; border-radius:6px; border:1px solid #222;">
           <div style="color:#888; font-size:0.85rem; margin-bottom:0.5rem;">Objects Stored</div>
           <div id="account-objects-count" style="font-size:1.75rem; font-weight:600; color:#10b981;">-</div>
@@ -221,43 +479,14 @@
     <section>
       <h2>🔧 CORS Diagnostics</h2>
       <p style="color:#888; font-size:0.9rem; margin-bottom:1rem;">
-        Test endpoints to verify CORS preflight (OPTIONS) support. If these fail with CORS errors, the endpoints need OPTIONS routes added.
+        Sends an OPTIONS preflight request to every API endpoint. The last two auth UI routes intentionally
+        have CORS disabled.
       </p>
-
-      <div style="display:grid; gap:1rem;">
-        <!-- Test POST /slabs -->
-        <div style="padding:1rem; background:#0a0a0a; border-radius:6px; border:1px solid #222;">
-          <div style="font-weight:500; margin-bottom:0.5rem;">POST /slabs</div>
-          <div style="color:#888; font-size:0.85rem; margin-bottom:0.75rem;">
-            Attempts to pin a test slab with random data. Should trigger CORS preflight due to signed authentication headers.
-          </div>
-          <button id="btn-test-post-slab" style="width:100%; padding:0.6rem; background:#3b82f6; color:white; border:none; border-radius:4px; cursor:pointer;">
-            Test POST /slabs
-          </button>
-          <div class="output" id="test-post-slab-status" style="margin-top:0.5rem; display:none;"></div>
-        </div>
-
-        <!-- Test DELETE /slabs/:slabid -->
-        <div style="padding:1rem; background:#0a0a0a; border-radius:6px; border:1px solid #222;">
-          <div style="font-weight:500; margin-bottom:0.5rem;">DELETE /slabs/:slabid</div>
-          <div style="color:#888; font-size:0.85rem; margin-bottom:0.75rem;">
-            Attempts to delete a slab (will fail if slab doesn't exist, but CORS check happens first). Tests DELETE method preflight.
-          </div>
-          <input id="test-slab-id" type="text" placeholder="Slab ID (hex) - leave blank to use random ID" style="width:100%; margin-bottom:0.5rem;" />
-          <button id="btn-test-delete-slab" style="width:100%; padding:0.6rem; background:#ef4444; color:white; border:none; border-radius:4px; cursor:pointer;">
-            Test DELETE /slabs/:slabid
-          </button>
-          <div class="output" id="test-delete-slab-status" style="margin-top:0.5rem; display:none;"></div>
-        </div>
-
-        <!-- Results Summary -->
-        <div style="padding:1rem; background:#0a0a0a; border-radius:6px; border:1px solid #222;">
-          <div style="font-weight:500; margin-bottom:0.5rem;">📊 Results Summary</div>
-          <div id="cors-summary" style="color:#888; font-size:0.85rem;">
-            Run tests above to see results. CORS errors indicate missing OPTIONS routes.
-          </div>
-        </div>
-      </div>
+      <button id="btn-cors-run-all"
+        style="width:100%; padding:0.6rem; background:#3b82f6; color:white; border:none; border-radius:4px; cursor:pointer; margin-bottom:1rem;">
+        Run All CORS Tests
+      </button>
+      <div id="cors-results" style="font-size:0.85rem;"></div>
     </section>
 
     <!-- Upload Text -->
@@ -322,7 +551,8 @@
       <div class="label">Expires in</div>
       <div class="row">
         <input id="share-duration" type="number" value="24" min="1" style="width:5rem" />
-        <select id="share-unit" style="background:#1a1a1a; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:0.5rem;">
+        <select id="share-unit"
+          style="background:#1a1a1a; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:0.5rem;">
           <option value="3600000">hours</option>
           <option value="86400000" selected>days</option>
           <option value="604800000">weeks</option>
@@ -339,12 +569,18 @@
       <!-- Browser Navigation Controls -->
       <div class="browser-nav" id="browser-nav">
         <div class="browser-nav-row">
-          <input type="text" class="address-bar" id="address-bar" placeholder="Paste Sia share URL or object ID..." title="Press Enter or click Go to auto-detect file type" style="flex:1;">
-          <button id="btn-go" title="Auto-detect file type and load content" style="background:#10b981; border-color:#10b981; font-weight:bold; padding:0.5rem 2rem;">Go</button>
+          <input type="text" class="address-bar" id="address-bar" placeholder="Paste Sia share URL or object ID..."
+            title="Press Enter or click Go to auto-detect file type" style="flex:1;">
+          <button id="btn-go" title="Auto-detect file type and load content"
+            style="background:#10b981; border-color:#10b981; font-weight:bold; padding:0.5rem 2rem;">Go</button>
         </div>
         <div class="browser-nav-row" style="justify-content:flex-start; gap:0.5rem;">
-          <button id="btn-external-tab" title="⚠️ Opens in new tab with JavaScript enabled - use only for trusted content" style="background:#f59e0b; border-color:#f59e0b; font-size:0.85rem; padding:0.4rem 0.8rem;">⚠️ Open in External Tab</button>
-          <span style="color:#888; font-size:0.8rem; font-style:italic;">Warning: External tab allows JavaScript execution</span>
+          <button id="btn-external-tab"
+            title="⚠️ Opens in new tab with JavaScript enabled - use only for trusted content"
+            style="background:#f59e0b; border-color:#f59e0b; font-size:0.85rem; padding:0.4rem 0.8rem;">⚠️ Open in
+            External Tab</button>
+          <span style="color:#888; font-size:0.8rem; font-style:italic;">Warning: External tab allows JavaScript
+            execution</span>
         </div>
       </div>
 
@@ -354,9 +590,12 @@
       <!-- Browser Container with Iframe and History -->
       <div class="browser-container" id="browser-container">
         <div class="browser-main">
-          <iframe id="html-iframe" style="width:100%; height:600px; border:1px solid #333; border-radius:4px; background:white;" sandbox="allow-same-origin"></iframe>
+          <iframe id="html-iframe"
+            style="width:100%; height:600px; border:1px solid #333; border-radius:4px; background:white;"
+            sandbox="allow-same-origin"></iframe>
           <!-- MSE Video Player (outside sandboxed iframe) -->
-          <div id="video-container" style="display:none; width:100%; height:600px; border:1px solid #333; border-radius:4px; background:#0a0a0a; padding:2rem; box-sizing:border-box;">
+          <div id="video-container"
+            style="display:none; width:100%; height:600px; border:1px solid #333; border-radius:4px; background:#0a0a0a; padding:2rem; box-sizing:border-box;">
             <video id="mse-video" controls autoplay style="width:100%; max-height:100%; background:#000;"></video>
           </div>
         </div>
@@ -378,7 +617,10 @@
     } from './pkg/indexd_wasm.js';
 
     // Import file-type for MIME detection
-    import {fileTypeFromBlob} from './vendor/file-type.bundle.js';
+    import { fileTypeFromBlob } from './vendor/file-type.bundle.js';
+
+    // Import mp4box for MP4 → fragmented MP4 transmuxing (MSE video streaming)
+    import { createFile as createMP4Box } from './vendor/mp4box.bundle.js';
 
     // Check browser compatibility on page load
     window.addEventListener('DOMContentLoaded', () => {
@@ -882,137 +1124,91 @@
     });
 
     // -- CORS Diagnostics --
-    document.getElementById('btn-test-post-slab').addEventListener('click', async () => {
-      const status = document.getElementById('test-post-slab-status');
-      const summary = document.getElementById('cors-summary');
-      const btn = document.getElementById('btn-test-post-slab');
+    document.getElementById('btn-cors-run-all').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-cors-run-all');
+      const resultsDiv = document.getElementById('cors-results');
+      const url = getUrl();
 
-      try {
-        btn.disabled = true;
-        btn.textContent = 'Testing...';
-        status.style.display = 'block';
-        status.textContent = 'Sending POST /slabs request with auth headers...';
-
-        const url = getUrl();
-        const keyHex = getKeyHex();
-
-        if (!url || !keyHex) {
-          status.innerHTML = '<span class="fail">Configure indexer URL and app key first</span>';
-          btn.disabled = false;
-          btn.textContent = 'Test POST /slabs';
-          return;
-        }
-
-        // Create minimal test payload
-        const testPayload = {
-          encryptionKey: randomHex(32),
-          minShards: 10,
-          sectors: [] // Empty - will fail validation, but CORS happens first
-        };
-
-        // Use fetch with signed headers to trigger CORS preflight
-        const response = await fetch(`${url}/slabs`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Amz-Date': new Date().toISOString() // Trigger preflight
-          },
-          body: JSON.stringify(testPayload)
-        });
-
-        if (response.ok) {
-          status.innerHTML = '<span class="pass">✓ POST /slabs successful! CORS preflight passed.</span>';
-          summary.innerHTML = '<span class="pass">✓ POST /slabs: CORS preflight passed</span>';
-        } else {
-          const errorText = await response.text();
-          status.innerHTML = `<span class="pass">✓ CORS preflight passed!\n\nServer returned: ${response.status} ${response.statusText}\n${errorText}</span>`;
-          summary.innerHTML = '<span class="pass">✓ POST /slabs: CORS preflight passed (server validation failed as expected)</span>';
-        }
-
-        btn.disabled = false;
-        btn.textContent = 'Test POST /slabs';
-      } catch (e) {
-        console.error('Test failed:', e);
-        const errorMsg = e.message || e.toString();
-        const isCorsError = errorMsg.includes('CORS') ||
-                           errorMsg.includes('preflight') ||
-                           errorMsg.includes('Failed to fetch') ||
-                           errorMsg.includes('NetworkError');
-
-        if (isCorsError) {
-          status.innerHTML = `<span class="fail">❌ CORS ERROR!\n\n${errorMsg}\n\nThe endpoint is missing an OPTIONS route for preflight.</span>`;
-          summary.innerHTML = '<span class="fail">❌ POST /slabs: CORS preflight FAILED - needs OPTIONS route</span>';
-        } else {
-          status.innerHTML = `<span class="fail">Test error: ${errorMsg}</span>`;
-        }
-
-        btn.disabled = false;
-        btn.textContent = 'Test POST /slabs';
+      if (!url) {
+        resultsDiv.innerHTML = '<span class="fail">Configure indexer URL first</span>';
+        return;
       }
-    });
 
-    document.getElementById('btn-test-delete-slab').addEventListener('click', async () => {
-      const status = document.getElementById('test-delete-slab-status');
-      const summary = document.getElementById('cors-summary');
-      const btn = document.getElementById('btn-test-delete-slab');
-      const slabIdInput = document.getElementById('test-slab-id').value.trim();
+      const fakeId = randomHex(32);
+      const fakeReqId = randomHex(16);
 
-      try {
-        btn.disabled = true;
-        btn.textContent = 'Testing...';
-        status.style.display = 'block';
-        status.textContent = 'Sending DELETE /slabs/:slabid request with auth headers...';
+      // All routes from the Go server, with the method that triggers preflight
+      const tests = [
+        // CORS-enabled routes (should pass)
+        { method: 'POST',   path: '/auth/connect',                       expect: true },
+        { method: 'GET',    path: `/auth/connect/${fakeReqId}/status`,   expect: true },
+        { method: 'POST',   path: `/auth/connect/${fakeReqId}/register`, expect: true },
+        { method: 'GET',    path: '/auth/check',                         expect: true },
+        { method: 'GET',    path: '/hosts',                              expect: true },
+        { method: 'GET',    path: '/objects',                            expect: true },
+        { method: 'GET',    path: `/objects/${fakeId}`,                  expect: true },
+        { method: 'GET',    path: `/objects/${fakeId}/shared`,           expect: true },
+        { method: 'POST',   path: '/objects',                            expect: true },
+        { method: 'DELETE', path: `/objects/${fakeId}`,                  expect: true },
+        { method: 'GET',    path: '/slabs',                              expect: true },
+        { method: 'POST',   path: '/slabs',                              expect: true },
+        { method: 'POST',   path: '/slabs/prune',                        expect: true },
+        { method: 'GET',    path: `/slabs/${fakeId}`,                    expect: true },
+        { method: 'DELETE', path: `/slabs/${fakeId}`,                    expect: true },
+        // CORS-disabled routes (should fail)
+        { method: 'GET',    path: `/auth/connect/${fakeReqId}`,          expect: false, note: 'CORS intentionally disabled (UI route)' },
+        { method: 'POST',   path: `/auth/connect/${fakeReqId}`,          expect: false, note: 'CORS intentionally disabled (UI route)' },
+      ];
 
-        const url = getUrl();
-        const keyHex = getKeyHex();
+      btn.disabled = true;
+      btn.textContent = 'Testing...';
+      resultsDiv.innerHTML = '';
 
-        if (!url || !keyHex) {
-          status.innerHTML = '<span class="fail">Configure indexer URL and app key first</span>';
-          btn.disabled = false;
-          btn.textContent = 'Test DELETE /slabs/:slabid';
-          return;
-        }
+      let passed = 0, failed = 0, expectedFails = 0;
 
-        // Use provided slab ID or generate a random one
-        const testSlabId = slabIdInput || randomHex(32);
+      for (const t of tests) {
+        const label = `${t.method} ${t.path.replace(fakeId, ':id').replace(fakeReqId, ':reqID')}`;
+        const row = document.createElement('div');
+        row.style.cssText = 'padding:0.4rem 0.6rem; border-bottom:1px solid #222; display:flex; justify-content:space-between; align-items:center;';
+        row.innerHTML = `<span style="font-family:monospace;">${label}</span><span style="color:#888;">testing...</span>`;
+        resultsDiv.appendChild(row);
 
-        // Use fetch with signed headers to trigger CORS preflight
-        const response = await fetch(`${url}/slabs/${testSlabId}`, {
-          method: 'DELETE',
-          headers: {
-            'X-Amz-Date': new Date().toISOString() // Trigger preflight
+        // Send the actual method with a custom header to force the browser to
+        // automatically send an OPTIONS preflight. If preflight fails, fetch throws.
+        try {
+          const resp = await fetch(`${url}${t.path}`, {
+            method: t.method,
+            headers: {
+              'X-CORS-Test': '1', // non-simple header forces preflight
+            },
+          });
+          // If we got here, preflight succeeded
+          if (t.expect) {
+            row.lastChild.innerHTML = `<span class="pass">PASS (${resp.status})</span>`;
+            passed++;
+          } else {
+            row.lastChild.innerHTML = `<span style="color:#f59e0b;">UNEXPECTED PASS (${resp.status})</span>`;
+            passed++;
           }
-        });
-
-        if (response.ok) {
-          status.innerHTML = '<span class="pass">✓ DELETE successful! CORS preflight passed.</span>';
-          summary.innerHTML = '<span class="pass">✓ DELETE /slabs/:slabid: CORS preflight passed</span>';
-        } else {
-          const errorText = await response.text();
-          status.innerHTML = `<span class="pass">✓ CORS preflight passed!\n\nServer returned: ${response.status} ${response.statusText}\n${errorText}</span>`;
-          summary.innerHTML = '<span class="pass">✓ DELETE /slabs/:slabid: CORS preflight passed (404 not found is expected)</span>';
+        } catch (e) {
+          if (!t.expect) {
+            row.lastChild.innerHTML = `<span style="color:#888;">BLOCKED (expected) — ${t.note}</span>`;
+            expectedFails++;
+          } else {
+            row.lastChild.innerHTML = '<span class="fail">FAIL — preflight rejected</span>';
+            failed++;
+          }
         }
-
-        btn.disabled = false;
-        btn.textContent = 'Test DELETE /slabs/:slabid';
-      } catch (e) {
-        console.error('Test failed:', e);
-        const errorMsg = e.message || e.toString();
-        const isCorsError = errorMsg.includes('CORS') ||
-                           errorMsg.includes('preflight') ||
-                           errorMsg.includes('Failed to fetch') ||
-                           errorMsg.includes('NetworkError');
-
-        if (isCorsError) {
-          status.innerHTML = `<span class="fail">❌ CORS ERROR!\n\n${errorMsg}\n\nThe endpoint is missing an OPTIONS route for preflight.</span>`;
-          summary.innerHTML = '<span class="fail">❌ DELETE /slabs/:slabid: CORS preflight FAILED - needs OPTIONS route</span>';
-        } else {
-          status.innerHTML = `<span class="fail">Test error: ${errorMsg}</span>`;
-        }
-
-        btn.disabled = false;
-        btn.textContent = 'Test DELETE /slabs/:slabid';
       }
+
+      const summary = document.createElement('div');
+      summary.style.cssText = 'padding:0.75rem; margin-top:0.5rem; background:#0a0a0a; border-radius:4px; border:1px solid #222;';
+      const color = failed === 0 ? '#10b981' : '#ef4444';
+      summary.innerHTML = `<span style="color:${color}; font-weight:600;">${passed} passed, ${failed} failed, ${expectedFails} intentionally blocked</span>`;
+      resultsDiv.appendChild(summary);
+
+      btn.disabled = false;
+      btn.textContent = 'Run All CORS Tests';
     });
 
     // -- Upload Text --
@@ -1803,7 +1999,7 @@
 
     // If history is empty, add the welcome page to history
     if (browserHistory.length === 0) {
-      const welcomeUrl = 'sia://app.sia.storage/objects/20a4f56e14c0cf3a3e010370bceb5e665cf997ca8acbd1c7c2e5543bfe0da499/shared?sv=1785641173&sc=nmS95u9mPXfFkjj8fkVfCw28mgyVgq9IQOUQYBykQNs%3D&ss=NrjLZkHG8kCKBUdIOcqhlRriIOED_gCjIi_cn9HSwGCPwbCKDJAXZow7f8FYf4govWHC2M25n9EgPQZlz9eKDA%3D%3D#encryption_key=zdDhoRMpzziTJ7xPD1_Cy3QN0pZtuyg_1ElWPopvIRM=';
+      const welcomeUrl = 'sia://app.sia.storage/objects/09ea72b591744fc1743c31464691b1ec5980fcb095599f457997e9ad37577f7e/shared?sv=1802936115&sc=nmS95u9mPXfFkjj8fkVfCw28mgyVgq9IQOUQYBykQNs%3D&ss=slOkbXbAiHIouqyFvSIG2q-tCbKGXMMSHN_2jE2H9BI_f-siLvrGpvh-3uwzZXwwxbpUSSqCLM0t_lUqQm1RCw%3D%3D#encryption_key=vateUaubfTjtSy5o6yG2sk37UX2s9KBZaUenzd9OP68=';
 
       // Add welcome page to history (without blob URL - user will click to load)
       browserHistory.push({
@@ -1989,7 +2185,13 @@
       currentHistoryIndex = index;
       const item = browserHistory[index];
 
-      // If blob URL is null (e.g., after page refresh), re-download the file
+      // Stop any active browser stream when navigating away
+      if (activeBrowserStreamAbort) {
+        activeBrowserStreamAbort.abort();
+        activeBrowserStreamAbort = null;
+      }
+
+      // If blob URL is null (e.g., after page refresh or streaming video), re-download the file
       if (!item.blobUrl) {
         console.log('🔄 Blob URL missing, re-downloading:', item.originalUrl);
         await redownloadHistoryItem(item, index);
@@ -2007,7 +2209,7 @@
 
         iframe.style.display = 'block';
         videoContainer.style.display = 'none';
-        video.src = ''; // Clear video source
+        video.src = '';
 
         // Load in iframe
         iframe.src = item.blobUrl;
@@ -2020,13 +2222,39 @@
       const status = document.getElementById('iframe-status');
       const progress = document.getElementById('iframe-progress');
       const iframe = document.getElementById('html-iframe');
+      const videoContainer = document.getElementById('video-container');
+      const video = document.getElementById('mse-video');
 
       progress.style.display = 'none';
       progress.value = 0;
 
+      // Stop any active browser stream
+      if (activeBrowserStreamAbort) {
+        activeBrowserStreamAbort.abort();
+        activeBrowserStreamAbort = null;
+      }
+
       try {
         const sdk = await connectSdk(status);
         if (!sdk) return;
+
+        // For video items, re-stream via MSE
+        if (item.fileType === 'video') {
+          status.textContent = 'Re-streaming video...';
+          const obj = item.originalUrl.startsWith('sia://')
+            ? await sdk.sharedObject(item.originalUrl)
+            : await sdk.object(item.originalUrl);
+
+          iframe.style.display = 'none';
+          videoContainer.style.display = 'block';
+
+          const result = await transmuxAndStream(sdk, obj, video, status, progress);
+          activeBrowserStreamAbort = result;
+
+          status.innerHTML = `<span class="pass">${status.textContent}</span>`;
+          updateBrowserUI();
+          return;
+        }
 
         status.textContent = `Re-downloading ${item.fileType}...`;
 
@@ -2439,6 +2667,12 @@
       progress.style.display = 'none';
       progress.value = 0;
 
+      // Stop any active browser stream
+      if (activeBrowserStreamAbort) {
+        activeBrowserStreamAbort.abort();
+        activeBrowserStreamAbort = null;
+      }
+
       try {
         const sdk = await connectSdk(status);
         if (!sdk) return;
@@ -2449,8 +2683,39 @@
           : await sdk.object(url);
         const size = obj.size();
 
-        // Since we're not doing progressive streaming (MSE disabled),
-        // just download the entire file first, then detect type
+        // Check if this is an MP4 file that can be streamed via MSE
+        // MP4 files start with an ftyp box: bytes 4-7 are "ftyp"
+        const isMp4 = size > 40000000 && window.MediaSource; // Only stream files > 40MB with MSE support
+        // For large video files, use MSE streaming instead of full download
+        if (isMp4) {
+          status.textContent = 'Large file detected. Attempting MSE streaming...';
+          try {
+            // Switch to video container
+            iframe.style.display = 'none';
+            videoContainer.style.display = 'block';
+
+            const result = await transmuxAndStream(sdk, obj, video, status, progress);
+            activeBrowserStreamAbort = result;
+
+            // Add to history
+            const displayUrl = `Video (streaming): ${url}`;
+            addToHistory(displayUrl, null, displayUrl, false, url, 'video');
+
+            status.innerHTML = `<span class="pass">${status.textContent}</span>`;
+            return;
+          } catch (streamErr) {
+            // Streaming failed (not MP4, moov at end, unsupported codec, etc.)
+            // Fall through to full download path
+            console.log('[browser] MSE streaming failed, falling back to full download:', streamErr.message);
+            activeBrowserStreamAbort = null;
+            iframe.style.display = 'block';
+            videoContainer.style.display = 'none';
+            video.src = '';
+            status.textContent = 'Streaming unavailable, downloading full file...';
+          }
+        }
+
+        // Full download path (non-video files or streaming fallback)
         status.textContent = 'Downloading...';
         const result = await streamingDownload(sdk, obj, status, progress, 'Downloading');
         const downloadedBlob = result.blob;
@@ -2517,7 +2782,7 @@
         const downloadStart = performance.now();
 
         if (fileType === 'video') {
-          // Create video player HTML with the already-downloaded blob
+          // Video that was too small to stream or streaming failed — use iframe player
           const videoBlob = new Blob([downloadedBlob], { type: mimeType });
           const videoUrl = URL.createObjectURL(videoBlob);
           const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0;font-family:system-ui,sans-serif;padding:2rem;}video{width:100%;max-width:1200px;background:#000;}</style></head><body><h2 style="margin-bottom:1rem;">🎬 Video Player</h2><video controls autoplay><source src="${videoUrl}" type="${mimeType}">Your browser does not support the video element.</video><p style="margin-top:1rem;color:#888;">File size: ${formatSize(size)} | Type: ${mimeType}</p></body></html>`;
@@ -2738,6 +3003,276 @@
       }
     });
 
+    // ===== Stream Video Section =====
+
+    async function transmuxAndStream(sdk, obj, videoEl, statusEl, progressEl) {
+      if (!window.MediaSource) {
+        throw new Error('MediaSource Extensions not supported in this browser');
+      }
+
+      const totalSize = obj.size();
+      statusEl.textContent = `File size: ${formatSize(totalSize)}. Initializing...`;
+
+      const mp4box = createMP4Box();
+      const mediaSource = new MediaSource();
+      videoEl.src = URL.createObjectURL(mediaSource);
+
+      // State
+      let byteOffset = 0;
+      let downloadComplete = false;
+      let mp4boxReady = false;
+      let aborted = false;
+      let resolveAbort, rejectAbort;
+      const abortPromise = new Promise((resolve, reject) => {
+        resolveAbort = resolve;
+        rejectAbort = reject;
+      });
+
+      // Wait for sourceopen
+      await new Promise((resolve, reject) => {
+        mediaSource.addEventListener('sourceopen', resolve, { once: true });
+        mediaSource.addEventListener('error', () => reject(new Error('MediaSource failed to open')), { once: true });
+        setTimeout(() => reject(new Error('MediaSource sourceopen timeout')), 5000);
+      });
+
+      statusEl.textContent = 'MediaSource opened. Downloading first slab...';
+
+      function maybeEndOfStream() {
+        if (!downloadComplete) return;
+        if (appendQueue.length > 0 || sbAppending) return;
+        if (mediaSource.readyState === 'open') {
+          try { mediaSource.endOfStream(); } catch (e) {}
+        }
+      }
+
+      // mp4box v2 returns a single init segment for all tracks.
+      // Use one combined SourceBuffer with all codecs.
+      let sourceBuffer = null;
+      const appendQueue = [];
+      let sbAppending = false;
+
+      mp4box.onReady = (info) => {
+        mp4boxReady = true;
+        console.log('[stream] onReady fired. All tracks:', info.tracks.map(t => ({
+          id: t.id, codec: t.codec, video: !!t.video, audio: !!t.audio,
+          type: t.type, name: t.name
+        })));
+
+        // Filter to only video and audio tracks (skip timecode, metadata, etc.)
+        const mediaTracks = info.tracks.filter(t => t.video || t.audio);
+        console.log('[stream] Media tracks:', mediaTracks.map(t => ({
+          id: t.id, codec: t.codec, video: !!t.video, audio: !!t.audio,
+        })));
+
+        if (mediaTracks.length === 0) {
+          rejectAbort(new Error('No video or audio tracks found'));
+          return;
+        }
+
+        const trackDescs = mediaTracks.map(t =>
+          `${t.video ? 'video' : 'audio'} (${t.codec})`
+        ).join(', ');
+        statusEl.textContent = `Tracks: ${trackDescs}. Starting playback...`;
+
+        // Build combined codec string from media tracks only
+        const codecs = mediaTracks.map(t => t.codec).join(', ');
+        const mime = `video/mp4; codecs="${codecs}"`;
+        console.log(`[stream] Combined MIME: ${mime}`);
+
+        if (!MediaSource.isTypeSupported(mime)) {
+          console.error(`[stream] MIME not supported: ${mime}`);
+          rejectAbort(new Error(`Codec not supported by browser: ${mime}`));
+          return;
+        }
+
+        sourceBuffer = mediaSource.addSourceBuffer(mime);
+        sourceBuffer.addEventListener('updateend', () => {
+          sbAppending = false;
+          // After any operation completes, try to drain queued data
+          if (needsEviction) {
+            tryEvict();
+          } else {
+            drainAppendQueue();
+          }
+        });
+        sourceBuffer.addEventListener('error', (e) => {
+          console.error('[stream] SourceBuffer error:', e);
+        });
+
+        // Periodically evict old buffer data as video plays
+        videoEl.addEventListener('timeupdate', () => {
+          if (needsEviction && !sbAppending && sourceBuffer && !sourceBuffer.updating) {
+            tryEvict();
+          }
+        });
+
+        // Set segment options only for media tracks
+        for (const track of mediaTracks) {
+          mp4box.setSegmentOptions(track.id, null, { nbSamples: 100 });
+        }
+
+        // Get single combined init segment (mp4box v2 API)
+        const initResult = mp4box.initializeSegmentation();
+        console.log('[stream] Init segment:', {
+          tracks: initResult.tracks,
+          bufferSize: initResult.buffer?.byteLength
+        });
+
+        if (initResult.buffer) {
+          appendQueue.push(initResult.buffer);
+          drainAppendQueue();
+        }
+
+        mp4box.start();
+        videoEl.play().catch(e => console.log('[stream] autoplay blocked:', e.message));
+      };
+
+      let needsEviction = false;
+
+      function tryEvict() {
+        if (!sourceBuffer || sourceBuffer.updating || sbAppending) return;
+        if (!sourceBuffer.buffered || sourceBuffer.buffered.length === 0) {
+          // No buffered data yet, just retry the append
+          needsEviction = false;
+          drainAppendQueue();
+          return;
+        }
+
+        const currentTime = videoEl.currentTime;
+        const bufferedStart = sourceBuffer.buffered.start(0);
+        const keepBehind = 5; // keep 5 seconds behind playhead
+
+        if (currentTime - bufferedStart > keepBehind) {
+          const removeEnd = currentTime - keepBehind;
+          console.log(`[stream] Evicting buffer: ${bufferedStart.toFixed(1)}s → ${removeEnd.toFixed(1)}s (playhead at ${currentTime.toFixed(1)}s)`);
+          sbAppending = true;
+          sourceBuffer.remove(bufferedStart, removeEnd);
+          needsEviction = false;
+          // updateend will fire → sbAppending=false → drainAppendQueue resumes
+        } else {
+          // Playhead hasn't advanced enough to evict. Wait for timeupdate.
+          // Don't spam retries — the timeupdate listener will trigger us.
+        }
+      }
+
+      function drainAppendQueue() {
+        if (!sourceBuffer || sbAppending || appendQueue.length === 0) {
+          maybeEndOfStream();
+          return;
+        }
+        // Proactively evict if we have a lot buffered ahead
+        if (sourceBuffer.buffered && sourceBuffer.buffered.length > 0) {
+          const bufferedEnd = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
+          const bufferedStart = sourceBuffer.buffered.start(0);
+          const currentTime = videoEl.currentTime;
+          // If buffer exceeds 60 seconds ahead of playhead, evict old data first
+          if (bufferedEnd - currentTime > 60 && currentTime - bufferedStart > 5) {
+            console.log(`[stream] Proactive eviction: ${(bufferedEnd - currentTime).toFixed(0)}s buffered ahead`);
+            needsEviction = true;
+            tryEvict();
+            return;
+          }
+        }
+        const buf = appendQueue.shift();
+        sbAppending = true;
+        try {
+          sourceBuffer.appendBuffer(buf);
+        } catch (e) {
+          sbAppending = false;
+          if (e.name === 'QuotaExceededError') {
+            appendQueue.unshift(buf);
+            if (!needsEviction) {
+              console.warn('[stream] QuotaExceededError, waiting for playback to advance...');
+            }
+            needsEviction = true;
+            tryEvict();
+          } else {
+            console.error('[stream] appendBuffer error:', e);
+          }
+        }
+      }
+
+      let segmentCount = 0;
+      mp4box.onSegment = (trackId, user, buffer) => {
+        segmentCount++;
+        if (segmentCount <= 5 || segmentCount % 20 === 0) {
+          console.log(`[stream] onSegment #${segmentCount}: track=${trackId} size=${buffer.byteLength}`);
+        }
+        appendQueue.push(buffer);
+        if (!needsEviction) {
+          drainAppendQueue();
+        }
+        // If needsEviction, don't try to drain — wait for eviction to complete
+      };
+
+      mp4box.onError = (e) => {
+        console.error('[stream] mp4box error:', e);
+      };
+
+      // Stream data
+      progressEl.style.display = 'block';
+      const downloadStart = performance.now();
+
+      let chunkCount = 0;
+      const streamPromise = sdk.downloadStreaming(obj,
+        (chunk) => {
+          if (aborted) return;
+          chunkCount++;
+          const buf = chunk.buffer.slice(
+            chunk.byteOffset,
+            chunk.byteOffset + chunk.byteLength
+          );
+          buf.fileStart = byteOffset;
+          if (chunkCount <= 3) {
+            console.log(`[stream] chunk #${chunkCount}: size=${chunk.byteLength} fileStart=${byteOffset}`);
+          }
+          byteOffset += chunk.byteLength;
+          mp4box.appendBuffer(buf);
+        },
+        (current, total) => {
+          if (aborted) return;
+          progressEl.max = total;
+          progressEl.value = current;
+          const pct = total > 0 ? ((current / total) * 100).toFixed(0) : 0;
+          statusEl.textContent = `Streaming: ${current}/${total} slabs (${pct}%) — ${formatSize(byteOffset)} / ${formatSize(totalSize)}`;
+
+          // Detect moov-at-end or non-MP4: if first slab done and mp4box hasn't parsed moov
+          if (current >= 1 && !mp4boxReady) {
+            aborted = true;
+            rejectAbort(new Error(
+              'No moov atom found in first slab. The file may have moov at the end (common with GoPro/camera recordings). ' +
+              'Re-encode with "ffmpeg -i input.mp4 -movflags +faststart output.mp4" to fix, or use the Download section.'
+            ));
+          }
+        },
+      );
+
+      await Promise.race([streamPromise, abortPromise]);
+
+      if (!aborted) {
+        downloadComplete = true;
+        mp4box.flush();
+        progressEl.value = progressEl.max;
+        drainAppendQueue();
+        const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+        statusEl.textContent = `Stream complete! ${formatSize(totalSize)} downloaded in ${elapsed}s.`;
+      }
+
+      return {
+        abort: () => {
+          aborted = true;
+          try { mp4box.flush(); } catch (e) {}
+          if (mediaSource.readyState === 'open') {
+            try { mediaSource.endOfStream(); } catch (e) {}
+          }
+          resolveAbort();
+        }
+      };
+    }
+
+    let activeBrowserStreamAbort = null;
+
   </script>
 </body>
+
 </html>
