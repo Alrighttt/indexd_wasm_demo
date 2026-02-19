@@ -378,7 +378,7 @@
     } from './pkg/indexd_wasm.js';
 
     // Import file-type for MIME detection
-    import {fileTypeFromBlob} from 'https://cdn.jsdelivr.net/npm/file-type@19/+esm';
+    import {fileTypeFromBlob} from './vendor/file-type.bundle.js';
 
     // Check browser compatibility on page load
     window.addEventListener('DOMContentLoaded', () => {
