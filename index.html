@@ -114,21 +114,13 @@
       <div class="label">Service URL</div>
       <input id="reg-service-url" type="text" placeholder="https://myapp.example.com" style="margin-bottom:0.5rem" />
       <div class="row">
-        <button id="btn-gen-curl">1. Generate curl command</button>
-      </div>
-      <div class="output" id="reg-curl" style="display:none; cursor:pointer;" title="Click to copy"></div>
-      <div id="reg-paste-section" style="display:none; margin-top:0.75rem;">
-        <div class="label">Paste the JSON response from curl here:</div>
-        <textarea id="reg-response" rows="3" placeholder='{"responseURL":"...","statusURL":"...","registerURL":"...","expiration":"..."}'></textarea>
-        <div class="row" style="margin-top:0.5rem">
-          <button id="btn-set-response">2. Continue</button>
-        </div>
+        <button id="btn-request-connection">1. Request Connection</button>
       </div>
       <div class="output" id="reg-status" style="display:none;"></div>
       <div id="reg-approval" style="display:none; margin-top:0.75rem;">
         <div class="label">Approve the connection by visiting the link above, then:</div>
         <div class="row">
-          <button id="btn-wait-approval">3. Wait for Approval</button>
+          <button id="btn-wait-approval">2. Wait for Approval</button>
         </div>
       </div>
       <div id="reg-finalize" style="display:none; margin-top:0.75rem;">
@@ -138,7 +130,7 @@
           <button id="btn-reg-generate">Generate</button>
         </div>
         <div class="row" style="margin-top:0.5rem">
-          <button id="btn-register">4. Register</button>
+          <button id="btn-register">3. Register</button>
         </div>
       </div>
       <div class="output" id="reg-result" style="display:none; margin-top:0.75rem;"></div>
@@ -223,6 +215,49 @@
       </div>
 
       <div class="output" id="account-status" style="margin-top:1rem;"></div>
+    </section>
+
+    <!-- CORS Diagnostics -->
+    <section>
+      <h2>🔧 CORS Diagnostics</h2>
+      <p style="color:#888; font-size:0.9rem; margin-bottom:1rem;">
+        Test endpoints to verify CORS preflight (OPTIONS) support. If these fail with CORS errors, the endpoints need OPTIONS routes added.
+      </p>
+
+      <div style="display:grid; gap:1rem;">
+        <!-- Test POST /slabs -->
+        <div style="padding:1rem; background:#0a0a0a; border-radius:6px; border:1px solid #222;">
+          <div style="font-weight:500; margin-bottom:0.5rem;">POST /slabs</div>
+          <div style="color:#888; font-size:0.85rem; margin-bottom:0.75rem;">
+            Attempts to pin a test slab with random data. Should trigger CORS preflight due to signed authentication headers.
+          </div>
+          <button id="btn-test-post-slab" style="width:100%; padding:0.6rem; background:#3b82f6; color:white; border:none; border-radius:4px; cursor:pointer;">
+            Test POST /slabs
+          </button>
+          <div class="output" id="test-post-slab-status" style="margin-top:0.5rem; display:none;"></div>
+        </div>
+
+        <!-- Test DELETE /slabs/:slabid -->
+        <div style="padding:1rem; background:#0a0a0a; border-radius:6px; border:1px solid #222;">
+          <div style="font-weight:500; margin-bottom:0.5rem;">DELETE /slabs/:slabid</div>
+          <div style="color:#888; font-size:0.85rem; margin-bottom:0.75rem;">
+            Attempts to delete a slab (will fail if slab doesn't exist, but CORS check happens first). Tests DELETE method preflight.
+          </div>
+          <input id="test-slab-id" type="text" placeholder="Slab ID (hex) - leave blank to use random ID" style="width:100%; margin-bottom:0.5rem;" />
+          <button id="btn-test-delete-slab" style="width:100%; padding:0.6rem; background:#ef4444; color:white; border:none; border-radius:4px; cursor:pointer;">
+            Test DELETE /slabs/:slabid
+          </button>
+          <div class="output" id="test-delete-slab-status" style="margin-top:0.5rem; display:none;"></div>
+        </div>
+
+        <!-- Results Summary -->
+        <div style="padding:1rem; background:#0a0a0a; border-radius:6px; border:1px solid #222;">
+          <div style="font-weight:500; margin-bottom:0.5rem;">📊 Results Summary</div>
+          <div id="cors-summary" style="color:#888; font-size:0.85rem;">
+            Run tests above to see results. CORS errors indicate missing OPTIONS routes.
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- Upload Text -->
@@ -572,13 +607,13 @@
     let regBuilder = null;
     let regAppId = null;
 
-    document.getElementById('btn-gen-curl').addEventListener('click', () => {
-      const curlDiv = document.getElementById('reg-curl');
-      const pasteSection = document.getElementById('reg-paste-section');
+    document.getElementById('btn-request-connection').addEventListener('click', async () => {
       const status = document.getElementById('reg-status');
       const approvalDiv = document.getElementById('reg-approval');
       const finalizeDiv = document.getElementById('reg-finalize');
       const resultDiv = document.getElementById('reg-result');
+      const btn = document.getElementById('btn-request-connection');
+
       const url = getUrl();
       const name = document.getElementById('reg-name').value.trim();
       const desc = document.getElementById('reg-desc').value.trim();
@@ -590,58 +625,40 @@
       resultDiv.style.display = 'none';
 
       if (!url || !name || !desc || !serviceUrl) {
-        curlDiv.style.display = 'block';
-        curlDiv.innerHTML = '<span class="fail">Indexer URL (in Configuration) and all fields are required</span>';
-        return;
-      }
-
-      regAppId = randomHex(32);
-      const body = JSON.stringify({
-        appID: regAppId,
-        name: name,
-        description: desc,
-        serviceURL: serviceUrl,
-      });
-
-      const curlCmd = `curl -s -X POST ${url}/auth/connect -H 'Content-Type: application/json' -d '${body}'`;
-      curlDiv.style.display = 'block';
-      curlDiv.textContent = curlCmd;
-      pasteSection.style.display = 'block';
-
-      curlDiv.onclick = () => {
-        navigator.clipboard.writeText(curlCmd);
-        curlDiv.innerHTML = curlDiv.textContent + '\n<span class="pass">Copied!</span>';
-      };
-    });
-
-    document.getElementById('btn-set-response').addEventListener('click', () => {
-      const status = document.getElementById('reg-status');
-      const approvalDiv = document.getElementById('reg-approval');
-      const responseJson = document.getElementById('reg-response').value.trim();
-      const url = getUrl();
-
-      if (!responseJson) {
         status.style.display = 'block';
-        status.innerHTML = '<span class="fail">Paste the JSON response first</span>';
+        status.innerHTML = '<span class="fail">Indexer URL (in Configuration) and all fields are required</span>';
         return;
       }
 
       try {
-        const parsed = JSON.parse(responseJson);
-        if (!parsed.responseURL || !parsed.statusURL || !parsed.registerURL) {
-          throw new Error('Response must contain responseURL, statusURL, and registerURL');
-        }
+        btn.disabled = true;
+        btn.textContent = 'Requesting connection...';
+        status.style.display = 'block';
+        status.textContent = 'Requesting connection from indexer...';
 
+        regAppId = randomHex(32);
         regBuilder = new Builder(url);
-        regBuilder.setConnectionResponse(regAppId, responseJson);
+
+        const appMetadata = JSON.stringify({
+          appID: regAppId,
+          name: name,
+          description: desc,
+          serviceURL: serviceUrl
+        });
+
+        await regBuilder.requestConnection(appMetadata);
 
         const responseUrl = regBuilder.responseUrl();
-        status.style.display = 'block';
-        status.innerHTML = `<span class="pass">Connection response accepted!</span>\n\nApprove this app by visiting:\n<a href="${responseUrl}" target="_blank" rel="noopener" style="color:#60a5fa; word-break:break-all;">${responseUrl}</a>`;
+        status.innerHTML = `<span class="pass">✓ Connection requested!</span>\n\nApprove this app by visiting:\n<a href="${responseUrl}" target="_blank" rel="noopener" style="color:#60a5fa; word-break:break-all;">${responseUrl}</a>`;
         approvalDiv.style.display = 'block';
+
+        btn.textContent = '1. Request Connection';
+        btn.disabled = false;
       } catch (e) {
         status.style.display = 'block';
-        status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
+        status.innerHTML = `<span class="fail">Failed to request connection: ${e.message}</span>`;
+        btn.textContent = '1. Request Connection';
+        btn.disabled = false;
       }
     });
 
@@ -651,7 +668,7 @@
       const btn = document.getElementById('btn-wait-approval');
 
       if (!regBuilder) {
-        status.innerHTML += `\n<span class="fail">Complete steps 1 and 2 first</span>`;
+        status.innerHTML += `\n<span class="fail">Complete step 1 first</span>`;
         return;
       }
 
@@ -862,6 +879,140 @@
           await loadAccountDashboard();
         }
       }, 1000);
+    });
+
+    // -- CORS Diagnostics --
+    document.getElementById('btn-test-post-slab').addEventListener('click', async () => {
+      const status = document.getElementById('test-post-slab-status');
+      const summary = document.getElementById('cors-summary');
+      const btn = document.getElementById('btn-test-post-slab');
+
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Testing...';
+        status.style.display = 'block';
+        status.textContent = 'Sending POST /slabs request with auth headers...';
+
+        const url = getUrl();
+        const keyHex = getKeyHex();
+
+        if (!url || !keyHex) {
+          status.innerHTML = '<span class="fail">Configure indexer URL and app key first</span>';
+          btn.disabled = false;
+          btn.textContent = 'Test POST /slabs';
+          return;
+        }
+
+        // Create minimal test payload
+        const testPayload = {
+          encryptionKey: randomHex(32),
+          minShards: 10,
+          sectors: [] // Empty - will fail validation, but CORS happens first
+        };
+
+        // Use fetch with signed headers to trigger CORS preflight
+        const response = await fetch(`${url}/slabs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Amz-Date': new Date().toISOString() // Trigger preflight
+          },
+          body: JSON.stringify(testPayload)
+        });
+
+        if (response.ok) {
+          status.innerHTML = '<span class="pass">✓ POST /slabs successful! CORS preflight passed.</span>';
+          summary.innerHTML = '<span class="pass">✓ POST /slabs: CORS preflight passed</span>';
+        } else {
+          const errorText = await response.text();
+          status.innerHTML = `<span class="pass">✓ CORS preflight passed!\n\nServer returned: ${response.status} ${response.statusText}\n${errorText}</span>`;
+          summary.innerHTML = '<span class="pass">✓ POST /slabs: CORS preflight passed (server validation failed as expected)</span>';
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Test POST /slabs';
+      } catch (e) {
+        console.error('Test failed:', e);
+        const errorMsg = e.message || e.toString();
+        const isCorsError = errorMsg.includes('CORS') ||
+                           errorMsg.includes('preflight') ||
+                           errorMsg.includes('Failed to fetch') ||
+                           errorMsg.includes('NetworkError');
+
+        if (isCorsError) {
+          status.innerHTML = `<span class="fail">❌ CORS ERROR!\n\n${errorMsg}\n\nThe endpoint is missing an OPTIONS route for preflight.</span>`;
+          summary.innerHTML = '<span class="fail">❌ POST /slabs: CORS preflight FAILED - needs OPTIONS route</span>';
+        } else {
+          status.innerHTML = `<span class="fail">Test error: ${errorMsg}</span>`;
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Test POST /slabs';
+      }
+    });
+
+    document.getElementById('btn-test-delete-slab').addEventListener('click', async () => {
+      const status = document.getElementById('test-delete-slab-status');
+      const summary = document.getElementById('cors-summary');
+      const btn = document.getElementById('btn-test-delete-slab');
+      const slabIdInput = document.getElementById('test-slab-id').value.trim();
+
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Testing...';
+        status.style.display = 'block';
+        status.textContent = 'Sending DELETE /slabs/:slabid request with auth headers...';
+
+        const url = getUrl();
+        const keyHex = getKeyHex();
+
+        if (!url || !keyHex) {
+          status.innerHTML = '<span class="fail">Configure indexer URL and app key first</span>';
+          btn.disabled = false;
+          btn.textContent = 'Test DELETE /slabs/:slabid';
+          return;
+        }
+
+        // Use provided slab ID or generate a random one
+        const testSlabId = slabIdInput || randomHex(32);
+
+        // Use fetch with signed headers to trigger CORS preflight
+        const response = await fetch(`${url}/slabs/${testSlabId}`, {
+          method: 'DELETE',
+          headers: {
+            'X-Amz-Date': new Date().toISOString() // Trigger preflight
+          }
+        });
+
+        if (response.ok) {
+          status.innerHTML = '<span class="pass">✓ DELETE successful! CORS preflight passed.</span>';
+          summary.innerHTML = '<span class="pass">✓ DELETE /slabs/:slabid: CORS preflight passed</span>';
+        } else {
+          const errorText = await response.text();
+          status.innerHTML = `<span class="pass">✓ CORS preflight passed!\n\nServer returned: ${response.status} ${response.statusText}\n${errorText}</span>`;
+          summary.innerHTML = '<span class="pass">✓ DELETE /slabs/:slabid: CORS preflight passed (404 not found is expected)</span>';
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Test DELETE /slabs/:slabid';
+      } catch (e) {
+        console.error('Test failed:', e);
+        const errorMsg = e.message || e.toString();
+        const isCorsError = errorMsg.includes('CORS') ||
+                           errorMsg.includes('preflight') ||
+                           errorMsg.includes('Failed to fetch') ||
+                           errorMsg.includes('NetworkError');
+
+        if (isCorsError) {
+          status.innerHTML = `<span class="fail">❌ CORS ERROR!\n\n${errorMsg}\n\nThe endpoint is missing an OPTIONS route for preflight.</span>`;
+          summary.innerHTML = '<span class="fail">❌ DELETE /slabs/:slabid: CORS preflight FAILED - needs OPTIONS route</span>';
+        } else {
+          status.innerHTML = `<span class="fail">Test error: ${errorMsg}</span>`;
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Test DELETE /slabs/:slabid';
+      }
     });
 
     // -- Upload Text --
