@@ -294,6 +294,101 @@
     .history-delete {
       flex-shrink: 0;
     }
+
+    /* Volume slider: custom styling so thumb visually spans the full track.
+       The input is widened by thumb-width (12px) with negative margins so the
+       thumb center can reach both edges of the visible 80px track. */
+    .vc-vol-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 92px;
+      height: 20px;
+      background: transparent;
+      outline: none;
+      cursor: pointer;
+      margin: 0 -2px;
+    }
+    .vc-vol-slider::-webkit-slider-runnable-track {
+      height: 4px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 9999px;
+    }
+    .vc-vol-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #10b981;
+      cursor: pointer;
+      margin-top: -4px;
+    }
+    .vc-vol-slider::-moz-range-track {
+      height: 4px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 9999px;
+    }
+    .vc-vol-slider::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #10b981;
+      border: none;
+      cursor: pointer;
+    }
+
+    /* Seek bar */
+    #vc-seekbar {
+      flex: 1;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      position: relative;
+    }
+    #vc-seek-track {
+      width: 100%;
+      height: 4px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+      position: relative;
+      overflow: visible;
+      transition: height 0.15s;
+    }
+    #vc-seekbar:hover #vc-seek-track {
+      height: 6px;
+    }
+    #vc-seek-buffered {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      background: rgba(255,255,255,0.25);
+      border-radius: 2px;
+      width: 0%;
+    }
+    #vc-seek-played {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      background: #10b981;
+      border-radius: 2px;
+      width: 0%;
+    }
+    #vc-seek-thumb {
+      position: absolute;
+      top: 50%;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #10b981;
+      transform: translate(-50%, -50%);
+      left: 0%;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    #vc-seekbar:hover #vc-seek-thumb {
+      opacity: 1;
+    }
   </style>
 </head>
 
@@ -341,9 +436,16 @@
           <label style="font-size:0.85rem; color:#999;">Max Uploads:</label>
           <input id="cfg-max-uploads" type="number" min="1" max="20" value="16"
             style="padding:0.4rem; text-align:center;" />
+          <label style="font-size:0.85rem; color:#999;">Download Workers:</label>
+          <input id="cfg-download-workers" type="number" min="1" max="16" value="4"
+            style="padding:0.4rem; text-align:center;" />
+          <label style="font-size:0.85rem; color:#999;">Upload Workers:</label>
+          <input id="cfg-upload-workers" type="number" min="1" max="16" value="4"
+            style="padding:0.4rem; text-align:center;" />
         </div>
         <div style="font-size:0.75rem; color:#999; margin-bottom:0.75rem; line-height:1.4;">
-          💡 Lower = more stable, higher = faster. Changes require reconnecting SDK.
+          💡 Lower = more stable, higher = faster. Changes require reconnecting SDK.<br/>
+          Workers: parallel threads for slab downloads/uploads (each gets its own SDK instance).
         </div>
       </div>
       <hr />
@@ -489,6 +591,7 @@
       <div id="cors-results" style="font-size:0.85rem;"></div>
     </section>
 
+
     <!-- Upload Text -->
     <section>
       <h2>Upload Text</h2>
@@ -593,10 +696,26 @@
           <iframe id="html-iframe"
             style="width:100%; height:600px; border:1px solid #333; border-radius:4px; background:white;"
             sandbox="allow-same-origin"></iframe>
-          <!-- MSE Video Player (outside sandboxed iframe) -->
+          <!-- WebCodecs Video Player (outside sandboxed iframe) -->
           <div id="video-container"
-            style="display:none; width:100%; height:600px; border:1px solid #333; border-radius:4px; background:#0a0a0a; padding:2rem; box-sizing:border-box;">
-            <video id="mse-video" controls autoplay style="width:100%; max-height:100%; background:#000;"></video>
+            style="display:none; width:100%; height:600px; border:1px solid #333; border-radius:4px; background:#0a0a0a; box-sizing:border-box; position:relative; overflow:hidden;">
+            <canvas id="stream-canvas" style="width:100%; height:100%; object-fit:contain; background:#000; display:block; cursor:pointer;"></canvas>
+            <!-- Minimal controls overlay -->
+            <div id="video-controls" style="position:absolute; bottom:0; left:0; right:0; padding:8px 12px; background:linear-gradient(transparent, rgba(0,0,0,0.8)); display:flex; align-items:center; gap:10px; opacity:0; transition:opacity 0.3s;">
+              <button id="vc-playpause" style="background:none; border:none; color:#fff; font-size:18px; cursor:pointer; padding:4px 8px;">&#9654;</button>
+              <span id="vc-time" style="color:#ccc; font-size:12px; font-family:monospace; min-width:60px;">0:00</span>
+              <div id="vc-seekbar">
+                <div id="vc-seek-track">
+                  <div id="vc-seek-buffered"></div>
+                  <div id="vc-seek-played"></div>
+                  <div id="vc-seek-thumb"></div>
+                </div>
+              </div>
+              <input id="vc-volume" type="range" min="0" max="1" step="0.01" value="1" class="vc-vol-slider">
+              <button id="vc-fullscreen" style="background:none; border:none; color:#fff; font-size:16px; cursor:pointer; padding:4px 8px;">&#x26F6;</button>
+            </div>
+            <!-- MSE fallback video (hidden, used only when WebCodecs unavailable) -->
+            <video id="mse-video" controls controlsList="nodownload" autoplay style="width:100%; height:100%; background:#000; display:none;"></video>
           </div>
         </div>
         <div class="browser-history">
@@ -619,8 +738,8 @@
     // Import file-type for MIME detection
     import { fileTypeFromBlob } from './vendor/file-type.bundle.js';
 
-    // Import mp4box for MP4 → fragmented MP4 transmuxing (MSE video streaming)
-    import { createFile as createMP4Box } from './vendor/mp4box.bundle.js';
+    // Import mp4box for MP4 demuxing (WebCodecs video streaming)
+    import { createFile as createMP4Box, DataStream, Endianness } from './vendor/mp4box.bundle.js';
 
     // Check browser compatibility on page load
     window.addEventListener('DOMContentLoaded', () => {
@@ -641,8 +760,6 @@
         document.body.prepend(warning);
       }
     });
-
-    let currentKey = null;
 
     function hex(bytes) {
       return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -698,24 +815,477 @@
       return { blob: new Blob(blobParts), elapsed };
     }
 
+    // Parallel slab download — spawns a pool of Web Workers, each with its own
+    // SDK instance and thread, to download slabs in true parallelism.
+    // Falls back to streamingDownload for files with <= 2 slabs.
+    async function parallelDownload(objectUrl, status, progress, label, numWorkers) {
+      numWorkers = numWorkers || getDownloadWorkers();
+      progress.style.display = 'block';
+
+      // 1. Get metadata on main thread (uses cached SDK — instant)
+      const sdk = await connectSdk(status);
+      if (!sdk) return null;
+
+      status.textContent = 'Fetching object metadata...';
+      const obj = objectUrl.startsWith('sia://')
+        ? await sdk.sharedObject(objectUrl)
+        : await sdk.object(objectUrl);
+      const slabCount = obj.slabCount();
+      const totalSize = obj.size();
+
+      // For tiny files, fall back to single-threaded download (worker overhead > benefit)
+      if (slabCount <= 2) {
+        return streamingDownload(sdk, obj, status, progress, label);
+      }
+
+      // 2. Spawn worker pool
+      const actualWorkers = Math.min(numWorkers, slabCount);
+
+      // Divide maxDownloads budget across workers to stay under Chrome's
+      // 64 pending WebTransport session limit.
+      const BROWSER_WT_LIMIT = 48; // leave headroom under Chrome's 64
+      const totalMaxDownloads = Math.min(getMaxDownloads(), BROWSER_WT_LIMIT);
+      const perWorkerMaxDownloads = Math.max(2, Math.floor(totalMaxDownloads / actualWorkers));
+
+      const config = {
+        type: 'init',
+        indexerUrl: getUrl(),
+        keyHex: getKeyHex(),
+        maxPriceFetches: getMaxPriceFetches(),
+        maxDownloads: perWorkerMaxDownloads,
+        maxUploads: getMaxUploads(),
+        objectUrl,
+      };
+
+      status.textContent = `Connecting ${actualWorkers} download workers...`;
+      const workers = [];
+      const readyPromises = [];
+
+      for (let i = 0; i < actualWorkers; i++) {
+        const w = new Worker('./slab-download-worker.js', { type: 'module' });
+        const ready = new Promise((resolve, reject) => {
+          const handler = (e) => {
+            if (e.data.type === 'ready') { w.removeEventListener('message', handler); resolve(); }
+            if (e.data.type === 'error') { w.removeEventListener('message', handler); reject(new Error(e.data.message)); }
+          };
+          w.addEventListener('message', handler);
+        });
+        w.postMessage(config);
+        workers.push(w);
+        readyPromises.push(ready);
+      }
+
+      await Promise.all(readyPromises);
+
+      // 3. Assign slabs to workers round-robin and collect results in order
+      const downloadStart = performance.now();
+      const slabData = new Array(slabCount); // ordered results
+      let nextSlab = 0;
+      let completedSlabs = 0;
+
+      return new Promise((resolve, reject) => {
+        let rejected = false;
+
+        function assignWork(worker) {
+          if (nextSlab >= slabCount || rejected) return;
+          const idx = nextSlab++;
+          worker.postMessage({ type: 'download-slab', slabIndex: idx });
+        }
+
+        for (const w of workers) {
+          w.onmessage = (e) => {
+            if (rejected) return;
+
+            if (e.data.type === 'slab-data') {
+              slabData[e.data.slabIndex] = e.data.data;
+              completedSlabs++;
+              progress.max = slabCount;
+              progress.value = completedSlabs;
+              status.textContent = `${label || 'Downloading'}... ${completedSlabs}/${slabCount} slabs (${actualWorkers} workers)`;
+
+              if (completedSlabs === slabCount) {
+                workers.forEach(w => w.terminate());
+                const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+                progress.value = progress.max;
+                resolve({ blob: new Blob(slabData), elapsed, size: totalSize });
+              } else {
+                assignWork(w);
+              }
+            }
+
+            if (e.data.type === 'slab-error') {
+              rejected = true;
+              workers.forEach(w => w.terminate());
+              reject(new Error(`Slab ${e.data.slabIndex}: ${e.data.message}`));
+            }
+          };
+          // Assign initial work
+          assignWork(w);
+        }
+      });
+    }
+
+    // Parallel slab download to disk via File System Access API.
+    // Writes slabs to a FileSystemWritableStream in order as they complete.
+    async function parallelDownloadToDisk(objectUrl, writable, status, progress, bytesCallback, numWorkers) {
+      numWorkers = numWorkers || getDownloadWorkers();
+
+      // Fetch object metadata on main thread (for slab count)
+      const sdk = await connectSdk(status);
+      if (!sdk) return null;
+
+      const obj = objectUrl.startsWith('sia://')
+        ? await sdk.sharedObject(objectUrl)
+        : await sdk.object(objectUrl);
+      const slabCount = obj.slabCount();
+      const slabLengths = Array.from(obj.slabLengths());
+      const totalSize = obj.size();
+
+      const actualWorkers = Math.min(numWorkers, slabCount);
+
+      const BROWSER_WT_LIMIT = 48;
+      const totalMaxDownloads = Math.min(getMaxDownloads(), BROWSER_WT_LIMIT);
+      const perWorkerMaxDownloads = Math.max(2, Math.floor(totalMaxDownloads / actualWorkers));
+
+      const config = {
+        type: 'init',
+        indexerUrl: getUrl(),
+        keyHex: getKeyHex(),
+        maxPriceFetches: getMaxPriceFetches(),
+        maxDownloads: perWorkerMaxDownloads,
+        maxUploads: getMaxUploads(),
+        objectUrl,
+      };
+
+      status.textContent = `Connecting ${actualWorkers} download workers...`;
+      const workers = [];
+      const readyPromises = [];
+
+      for (let i = 0; i < actualWorkers; i++) {
+        const w = new Worker('./slab-download-worker.js', { type: 'module' });
+        const ready = new Promise((resolve, reject) => {
+          const handler = (e) => {
+            if (e.data.type === 'ready') { w.removeEventListener('message', handler); resolve(); }
+            if (e.data.type === 'error') { w.removeEventListener('message', handler); reject(new Error(e.data.message)); }
+          };
+          w.addEventListener('message', handler);
+        });
+        w.postMessage(config);
+        workers.push(w);
+        readyPromises.push(ready);
+      }
+
+      await Promise.all(readyPromises);
+
+      const downloadStart = performance.now();
+      let nextSlab = 0;
+      let completedSlabs = 0;
+      let nextSlabToWrite = 0;
+      let bytesDownloaded = 0;
+      const pendingSlabs = new Map(); // slabIndex -> ArrayBuffer
+      let lastWrite = Promise.resolve();
+
+      function tryFlush() {
+        while (pendingSlabs.has(nextSlabToWrite)) {
+          const data = pendingSlabs.get(nextSlabToWrite);
+          pendingSlabs.delete(nextSlabToWrite);
+          const blob = new Blob([data]);
+          lastWrite = lastWrite.then(() => writable.write(blob));
+          nextSlabToWrite++;
+        }
+      }
+
+      return new Promise((resolve, reject) => {
+        let rejected = false;
+
+        function assignWork(worker) {
+          if (nextSlab >= slabCount || rejected) return;
+          const idx = nextSlab++;
+          worker.postMessage({ type: 'download-slab', slabIndex: idx });
+        }
+
+        for (const w of workers) {
+          w.onmessage = (e) => {
+            if (rejected) return;
+
+            if (e.data.type === 'slab-data') {
+              const idx = e.data.slabIndex;
+              pendingSlabs.set(idx, e.data.data);
+              completedSlabs++;
+              bytesDownloaded += slabLengths[idx];
+              if (bytesCallback) bytesCallback(bytesDownloaded);
+
+              progress.max = slabCount;
+              progress.value = completedSlabs;
+
+              tryFlush();
+
+              if (completedSlabs === slabCount) {
+                lastWrite.then(() => {
+                  workers.forEach(w => w.terminate());
+                  const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+                  progress.value = progress.max;
+                  resolve({ elapsed, size: totalSize });
+                }).catch(err => {
+                  workers.forEach(w => w.terminate());
+                  reject(err);
+                });
+              } else {
+                assignWork(w);
+              }
+            }
+
+            if (e.data.type === 'slab-error') {
+              rejected = true;
+              workers.forEach(w => w.terminate());
+              reject(new Error(`Slab ${e.data.slabIndex}: ${e.data.message}`));
+            }
+          };
+          assignWork(w);
+        }
+      });
+    }
+
+    // ── Parallel Slab Upload via Web Worker Pool ──────────────────────────
+    //
+    // Splits a file into slab-sized chunks (~40 MB each), distributes them
+    // to a pool of Web Workers, each with its own SDK instance, and uploads
+    // slabs in parallel. Returns a PinnedObject ready to pin to the indexer.
+    //
+    // For small files (≤2 slabs) falls back to single-threaded upload.
+
+    async function parallelUpload(file, status, progress, numWorkers) {
+      numWorkers = numWorkers || getUploadWorkers();
+      progress.style.display = 'block';
+
+      // 1. Get metadata on main thread
+      const sdk = await connectSdk(status);
+      if (!sdk) return null;
+
+      const fileSize = file.size;
+      const SLAB_DATA_SIZE = sdk.slabDataSize(); // 10 * 4 MiB = 41,943,040
+      const slabCount = fileSize === 0 ? 0 : Math.ceil(fileSize / SLAB_DATA_SIZE);
+
+      // For tiny files, fall back to single-threaded upload
+      if (slabCount <= 2) {
+        status.textContent = 'Small file — using single-threaded upload...';
+        const slab_data_size = 10 * 4_194_304;
+        const num_slabs = fileSize === 0 ? 0 : Math.ceil(fileSize / slab_data_size);
+        const total_shards = num_slabs * 30;
+
+        // Use chunked or streaming depending on size
+        const STREAMING_THRESHOLD = 1.5 * 1024 * 1024 * 1024;
+        const CHUNK_SIZE = 128 * 1024 * 1024;
+        const totalChunks = Math.ceil(fileSize / CHUNK_SIZE);
+        const uploadStart = performance.now();
+        let obj;
+
+        if (fileSize > STREAMING_THRESHOLD) {
+          const upload = sdk.streamingUpload(fileSize, (current, total) => {
+            progress.max = total;
+            progress.value = current;
+            status.textContent = `Uploading ${file.name}... ${current}/${total} shards`;
+          });
+          (async () => {
+            for (let i = 0; i < totalChunks; i++) {
+              const start = i * CHUNK_SIZE;
+              const end = Math.min(start + CHUNK_SIZE, fileSize);
+              const chunk = file.slice(start, end);
+              const data = new Uint8Array(await chunk.arrayBuffer());
+              await upload.pushChunk(data);
+            }
+            await upload.pushChunk(null);
+          })();
+          obj = await upload.promise;
+        } else {
+          const sessionId = sdk.startChunkedUpload(fileSize);
+          for (let i = 0; i < totalChunks; i++) {
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, fileSize);
+            const chunk = file.slice(start, end);
+            const data = new Uint8Array(await chunk.arrayBuffer());
+            sdk.uploadChunk(sessionId, data);
+          }
+          obj = await sdk.finalizeChunkedUpload(sessionId, (current, total) => {
+            progress.max = total;
+            progress.value = current;
+            status.textContent = `Uploading ${file.name}... ${current}/${total} shards`;
+          });
+        }
+        const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
+        return { obj, elapsed, size: fileSize };
+      }
+
+      // 2. Generate shared data key on main thread
+      const dataKey = sdk.generateDataKey(); // Uint8Array(32)
+      // Copy key to a plain ArrayBuffer for transfer to workers
+      const dataKeyBuf = dataKey.buffer.slice(dataKey.byteOffset, dataKey.byteOffset + dataKey.byteLength);
+
+      // 3. Spawn worker pool
+      const actualWorkers = Math.min(numWorkers, slabCount);
+
+      // Divide maxUploads budget across workers to stay under Chrome's
+      // 64 pending WebTransport session limit.
+      const BROWSER_WT_LIMIT = 48;
+      const totalMaxUploads = Math.min(getMaxUploads(), BROWSER_WT_LIMIT);
+      const perWorkerMaxUploads = Math.max(2, Math.floor(totalMaxUploads / actualWorkers));
+
+      const config = {
+        type: 'init',
+        indexerUrl: getUrl(),
+        keyHex: getKeyHex(),
+        maxPriceFetches: getMaxPriceFetches(),
+        maxUploads: perWorkerMaxUploads,
+      };
+
+      status.textContent = `Connecting ${actualWorkers} upload workers...`;
+      const workers = [];
+      const readyPromises = [];
+
+      for (let i = 0; i < actualWorkers; i++) {
+        const w = new Worker('./slab-upload-worker.js', { type: 'module' });
+        const ready = new Promise((resolve, reject) => {
+          const handler = (e) => {
+            if (e.data.type === 'ready') { w.removeEventListener('message', handler); resolve(); }
+            if (e.data.type === 'error') { w.removeEventListener('message', handler); reject(new Error(e.data.message)); }
+          };
+          w.addEventListener('message', handler);
+        });
+        w.postMessage({ ...config, workerIndex: i, numWorkers: actualWorkers });
+        workers.push(w);
+        readyPromises.push(ready);
+      }
+
+      await Promise.all(readyPromises);
+
+      // 4. Assign slabs to workers round-robin and collect results
+      const uploadStart = performance.now();
+      const slabJsons = new Array(slabCount);
+      const totalShards = slabCount * 30;
+      const slabShards = new Array(slabCount).fill(0);
+      let nextSlab = 0;
+      let completedSlabs = 0;
+
+      return new Promise((resolve, reject) => {
+        let rejected = false;
+
+        let hostReuseEnabled = false;
+
+        function sendSlabToWorker(worker, idx, allowHostReuse) {
+          const slabOffset = idx * SLAB_DATA_SIZE;
+          const slabEnd = Math.min(slabOffset + SLAB_DATA_SIZE, fileSize);
+          const blob = file.slice(slabOffset, slabEnd);
+          blob.arrayBuffer().then((buf) => {
+            worker.postMessage({
+              type: 'upload-slab',
+              slabIndex: idx,
+              data: buf,
+              dataKey: dataKeyBuf,
+              streamOffset: slabOffset,
+              allowHostReuse,
+            }, [buf]);
+          });
+        }
+
+        function assignWork(worker) {
+          if (nextSlab >= slabCount || rejected) return;
+          const idx = nextSlab++;
+          sendSlabToWorker(worker, idx, hostReuseEnabled);
+        }
+
+        for (const w of workers) {
+          w.onmessage = (e) => {
+            if (rejected) return;
+
+            if (e.data.type === 'shard-progress') {
+              // Track per-slab progress so retries don't double-count
+              slabShards[e.data.slabIndex] = e.data.current;
+              const shardsDone = slabShards.reduce((a, b) => a + b, 0);
+              progress.max = totalShards;
+              progress.value = shardsDone;
+              status.textContent = `Uploading ${file.name}... ${shardsDone}/${totalShards} shards (${actualWorkers} workers)`;
+            }
+
+            if (e.data.type === 'slab-uploaded') {
+              slabJsons[e.data.slabIndex] = e.data.slabJson;
+              completedSlabs++;
+              status.textContent = `Uploading ${file.name}... ${completedSlabs}/${slabCount} slabs (${actualWorkers} workers)`;
+
+              if (completedSlabs === slabCount) {
+                workers.forEach(w => w.terminate());
+
+                // Assemble the object on the main thread
+                try {
+                  const combinedSlabs = '[' + slabJsons.join(',') + ']';
+                  const obj = sdk.assembleObject(dataKey, combinedSlabs);
+                  const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
+                  progress.value = progress.max;
+                  resolve({ obj, elapsed, size: fileSize });
+                } catch (err) {
+                  reject(err);
+                }
+              } else {
+                assignWork(w);
+              }
+            }
+
+            if (e.data.type === 'slab-error') {
+              const failedIdx = e.data.slabIndex;
+              const failedMsg = e.data.message;
+
+              if (!hostReuseEnabled && failedMsg.includes('failed to upload shard')) {
+                // Pause all workers, ask user
+                const userAccepted = confirm(
+                  `Slab ${failedIdx} failed: not enough unique reachable hosts.\n\n` +
+                  `Would you like to retry by reusing hosts? This will allow the ` +
+                  `upload to succeed, but it will reduce redundancy by placing ` +
+                  `multiple shards on the same host.`
+                );
+
+                if (userAccepted) {
+                  hostReuseEnabled = true;
+                  status.textContent = `Retrying slab ${failedIdx} with host reuse...`;
+                  sendSlabToWorker(w, failedIdx, true);
+                  return;
+                }
+              }
+
+              // User declined or different error — abort
+              rejected = true;
+              workers.forEach(w => w.terminate());
+              reject(new Error(`Slab ${failedIdx}: ${failedMsg}`));
+            }
+          };
+          // Assign initial work
+          assignWork(w);
+        }
+      });
+    }
+
     // Auto-restore config from localStorage on page load
     const urlInput = document.getElementById('cfg-url');
     const keyInput = document.getElementById('cfg-key');
     const maxPriceFetchesInput = document.getElementById('cfg-max-price-fetches');
     const maxDownloadsInput = document.getElementById('cfg-max-downloads');
     const maxUploadsInput = document.getElementById('cfg-max-uploads');
+    const downloadWorkersInput = document.getElementById('cfg-download-workers');
+    const uploadWorkersInput = document.getElementById('cfg-upload-workers');
 
     const savedUrl = localStorage.getItem('indexer-url');
     const savedKey = localStorage.getItem('app-key');
     const savedMaxPriceFetches = localStorage.getItem('max-price-fetches');
     const savedMaxDownloads = localStorage.getItem('max-downloads');
     const savedMaxUploads = localStorage.getItem('max-uploads');
+    const savedDownloadWorkers = localStorage.getItem('download-workers');
+    const savedUploadWorkers = localStorage.getItem('upload-workers');
 
     if (savedUrl) urlInput.value = savedUrl;
     if (savedKey) keyInput.value = savedKey;
     if (savedMaxPriceFetches) maxPriceFetchesInput.value = savedMaxPriceFetches;
     if (savedMaxDownloads) maxDownloadsInput.value = savedMaxDownloads;
     if (savedMaxUploads) maxUploadsInput.value = savedMaxUploads;
+    if (savedDownloadWorkers) downloadWorkersInput.value = savedDownloadWorkers;
+    if (savedUploadWorkers) uploadWorkersInput.value = savedUploadWorkers;
 
     // Performance section toggle
     document.getElementById('performance-toggle').addEventListener('click', () => {
@@ -749,6 +1319,12 @@
       localStorage.setItem('max-uploads', maxUploadsInput.value);
       cachedSdk = null; // Invalidate SDK cache when concurrency settings change
     });
+    downloadWorkersInput.addEventListener('input', () => {
+      localStorage.setItem('download-workers', downloadWorkersInput.value);
+    });
+    uploadWorkersInput.addEventListener('input', () => {
+      localStorage.setItem('upload-workers', uploadWorkersInput.value);
+    });
 
     // helpers to read shared config
     function getUrl() { return document.getElementById('cfg-url').value.trim(); }
@@ -756,6 +1332,8 @@
     function getMaxPriceFetches() { return parseInt(document.getElementById('cfg-max-price-fetches').value) || 10; }
     function getMaxDownloads() { return parseInt(document.getElementById('cfg-max-downloads').value) || 20; }
     function getMaxUploads() { return parseInt(document.getElementById('cfg-max-uploads').value) || 16; }
+    function getDownloadWorkers() { return parseInt(document.getElementById('cfg-download-workers').value) || 4; }
+    function getUploadWorkers() { return parseInt(document.getElementById('cfg-upload-workers').value) || 4; }
 
     // SDK cache to avoid recreating and re-initializing
     let cachedSdk = null;
@@ -809,19 +1387,23 @@
     document.getElementById('app').style.display = 'block';
 
     // -- Performance Presets --
-    function setPreset(priceFetches, downloads, uploads) {
+    function setPreset(priceFetches, downloads, uploads, dlWorkers, ulWorkers) {
       document.getElementById('cfg-max-price-fetches').value = priceFetches;
       document.getElementById('cfg-max-downloads').value = downloads;
       document.getElementById('cfg-max-uploads').value = uploads;
+      document.getElementById('cfg-download-workers').value = dlWorkers;
+      document.getElementById('cfg-upload-workers').value = ulWorkers;
       localStorage.setItem('max-price-fetches', priceFetches);
       localStorage.setItem('max-downloads', downloads);
       localStorage.setItem('max-uploads', uploads);
+      localStorage.setItem('download-workers', dlWorkers);
+      localStorage.setItem('upload-workers', ulWorkers);
       cachedSdk = null; // Invalidate SDK cache
     }
 
-    document.getElementById('preset-conservative').addEventListener('click', () => setPreset(5, 10, 8));
-    document.getElementById('preset-balanced').addEventListener('click', () => setPreset(10, 20, 16));
-    document.getElementById('preset-fast').addEventListener('click', () => setPreset(10, 20, 20));
+    document.getElementById('preset-conservative').addEventListener('click', () => setPreset(5, 10, 8, 2, 2));
+    document.getElementById('preset-balanced').addEventListener('click', () => setPreset(10, 20, 16, 4, 4));
+    document.getElementById('preset-fast').addEventListener('click', () => setPreset(10, 20, 20, 8, 8));
 
     // -- Recovery Phrase --
     document.getElementById('btn-generate').addEventListener('click', () => {
@@ -1211,6 +1793,7 @@
       btn.textContent = 'Run All CORS Tests';
     });
 
+
     // -- Upload Text --
     document.getElementById('btn-upload').addEventListener('click', async () => {
       const status = document.getElementById('ul-status');
@@ -1234,7 +1817,7 @@
         status.textContent = 'Uploading...';
 
         const uploadStart = performance.now();
-        const obj = await sdk.uploadWithProgress(data, (current, total) => {
+        const obj = await sdk.upload(data, (current, total) => {
           progress.max = total;
           progress.value = current;
           status.textContent = `Uploading... ${current}/${total} shards`;
@@ -1295,95 +1878,18 @@
       progress.value = 0;
 
       try {
-        const sdk = await connectSdk(status);
-        if (!sdk) return;
+        status.innerHTML = `Uploading ${selectedFile.name} (${formatSize(selectedFile.size)})...\n`;
 
-        const fileSize = selectedFile.size;
-        const STREAMING_THRESHOLD = 1.5 * 1024 * 1024 * 1024; // 1.5 GB
-        const useStreaming = fileSize > STREAMING_THRESHOLD;
+        const result = await parallelUpload(selectedFile, status, progress);
+        if (!result) return;
 
-        status.innerHTML = `Uploading ${selectedFile.name} (${formatSize(fileSize)})...\n`;
-        if (useStreaming) {
-          status.innerHTML += '<span style="color:#60a5fa">Using streaming mode (no memory accumulation)</span>\n';
-        }
-
-        const CHUNK_SIZE = 128 * 1024 * 1024; // 128 MB chunks
-        const totalChunks = Math.ceil(fileSize / CHUNK_SIZE);
-        const uploadStart = performance.now();
-        let obj;
-
-        if (useStreaming) {
-          // === STREAMING UPLOAD (for files > 1.5GB) ===
-          // This mode reads chunks and uploads them concurrently without accumulating in memory
-
-          status.innerHTML += 'Initializing streaming upload...\n';
-          progress.style.display = 'block';
-
-          const upload = sdk.streamingUpload(fileSize, (current, total) => {
-            progress.max = total;
-            progress.value = current;
-            status.textContent = `Uploading ${selectedFile.name}... ${current}/${total} shards`;
-          });
-
-          // Start reading and pushing chunks asynchronously
-          (async () => {
-            try {
-              for (let i = 0; i < totalChunks; i++) {
-                const start = i * CHUNK_SIZE;
-                const end = Math.min(start + CHUNK_SIZE, fileSize);
-                const chunk = selectedFile.slice(start, end);
-                const buffer = await chunk.arrayBuffer();
-                const data = new Uint8Array(buffer);
-
-                await upload.pushChunk(data);  // ← CRITICAL: await for backpressure!
-                console.log(`📤 Pushed chunk ${i + 1}/${totalChunks} (${formatSize(end)})`);
-              }
-              await upload.pushChunk(null); // Signal EOF
-              console.log('✓ All chunks pushed, waiting for upload to complete');
-            } catch (e) {
-              console.error('Error pushing chunks:', e);
-              status.innerHTML += `\n<span class="fail">Error reading file: ${e.message}</span>`;
-            }
-          })();
-
-          // Wait for upload to complete
-          obj = await upload.promise;
-        } else {
-          // === CHUNKED UPLOAD (for files ≤ 1.5GB) ===
-          // This mode accumulates the file in WASM memory before uploading
-
-          status.innerHTML += `Reading file in ${totalChunks} chunk(s)...\n`;
-
-          const sessionId = sdk.startChunkedUpload(fileSize);
-
-          for (let i = 0; i < totalChunks; i++) {
-            const start = i * CHUNK_SIZE;
-            const end = Math.min(start + CHUNK_SIZE, fileSize);
-            const chunk = selectedFile.slice(start, end);
-            const buffer = await chunk.arrayBuffer();
-            const data = new Uint8Array(buffer);
-
-            const currentOffset = sdk.uploadChunk(sessionId, data);
-            status.textContent = `Reading file... ${i + 1}/${totalChunks} chunks (${formatSize(currentOffset)})`;
-          }
-
-          status.innerHTML += '\nUploading to Sia network...\n';
-          progress.style.display = 'block';
-
-          obj = await sdk.finalizeChunkedUpload(sessionId, (current, total) => {
-            progress.max = total;
-            progress.value = current;
-            status.textContent = `Uploading ${selectedFile.name}... ${current}/${total} shards`;
-          });
-        }
-
-        const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
+        const { obj, elapsed, size } = result;
         const objectId = obj.id();
-        const size = obj.size();
 
         progress.value = progress.max;
         status.innerHTML = `Upload complete (${formatSize(size)}) in ${elapsed}s. Pinning to indexer...`;
 
+        const sdk = await connectSdk(status);
         await sdk.pinObject(obj);
 
         status.innerHTML = `File: ${selectedFile.name}\nSize: ${formatSize(size)}\nUpload + pin completed in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
@@ -1440,26 +1946,22 @@
         status.textContent = 'Downloading...';
 
         const downloadStart = performance.now();
-        let bytesDownloaded = 0; // Track actual bytes downloaded
-        let currentSlab = 0;
-        let totalSlabs = 0;
+        let bytesDownloaded = 0;
+        let progressInterval = null;
 
-        // Update progress display
+        // Update progress display (reads from progress element + bytesDownloaded)
         const updateProgress = () => {
-          if (totalSlabs === 0) return; // Wait until we know total
+          const currentSlab = progress.value || 0;
+          const totalSlabs = progress.max || 0;
+          if (totalSlabs === 0) return;
 
           const now = performance.now();
-          progress.max = totalSlabs;
-          progress.value = currentSlab;
-
-          // Calculate metrics using actual bytes downloaded
           const percentage = ((currentSlab / totalSlabs) * 100).toFixed(1);
-          const elapsed = (now - downloadStart) / 1000; // seconds
-          const speed = bytesDownloaded / elapsed; // bytes per second
+          const elapsed = (now - downloadStart) / 1000;
+          const speed = bytesDownloaded / elapsed;
           const remaining = size - bytesDownloaded;
-          const eta = remaining / speed; // seconds
+          const eta = speed > 0 ? remaining / speed : 0;
 
-          // Format time helper
           const formatTime = (seconds) => {
             if (seconds < 60) return `${seconds.toFixed(0)}s`;
             const mins = Math.floor(seconds / 60);
@@ -1467,77 +1969,34 @@
             return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
           };
 
-          // Format speed
           const speedMBps = (speed / (1024 * 1024)).toFixed(2);
-
-          // Build status text
+          const workers = getDownloadWorkers();
           const line1 = `Downloading... ${currentSlab}/${totalSlabs} slabs (${percentage}%) • ${formatSize(bytesDownloaded)} / ${formatSize(size)}`;
-          const line2 = `${speedMBps} MB/s • ${formatTime(elapsed)} elapsed • ~${formatTime(eta)} remaining`;
+          const line2 = `${speedMBps} MB/s • ${formatTime(elapsed)} elapsed • ~${formatTime(eta)} remaining (${Math.min(workers, totalSlabs)} workers)`;
           status.textContent = `${line1}\n${line2}`;
         };
 
-        // Force updates every 100ms for smooth real-time display
-        const progressInterval = setInterval(updateProgress, 100);
+        progressInterval = setInterval(updateProgress, 100);
 
-        // Use the File System Access API to stream directly to disk when
-        // available (Chrome/Edge). Chunks are batched per slab (~40 MB) and
-        // written as a single Blob so memory stays bounded to ~1-2 slabs.
+        // Parallel slab download to disk via File System Access API
         if (window.showSaveFilePicker) {
           const handle = await window.showSaveFilePicker({
             suggestedName: filename,
           });
           const writable = await handle.createWritable();
           try {
-            // Accumulate chunks for the current slab; flush on progress
-            let slabChunks = [];
-            let lastWrite = Promise.resolve();
-
-            await sdk.downloadStreaming(obj,
-              (chunk) => {
-                // chunk is already a JS-owned copy from Rust — no extra copy needed
-                slabChunks.push(chunk);
-                bytesDownloaded += chunk.length; // Track actual bytes
-              },
-              (current, total) => {
-                // Update slab tracking (setInterval will pick this up)
-                currentSlab = current;
-                totalSlabs = total;
-                // Flush accumulated chunks to disk as one Blob per slab
-                if (slabChunks.length > 0) {
-                  const blob = new Blob(slabChunks);
-                  slabChunks = [];
-                  // Chain writes so they execute in order; the bounded queue
-                  // means at most a few slabs of data are held in memory.
-                  lastWrite = lastWrite.then(() => writable.write(blob));
-                }
-              },
-            );
-            // Flush any remaining buffered data
-            if (slabChunks.length > 0) {
-              const blob = new Blob(slabChunks);
-              slabChunks = [];
-              lastWrite = lastWrite.then(() => writable.write(blob));
-            }
-            await lastWrite;
+            await parallelDownloadToDisk(input, writable, status, progress,
+              (bytes) => { bytesDownloaded = bytes; });
             await writable.close();
           } catch (e) {
-            await writable.abort();
+            try { await writable.abort(); } catch (_) {}
             throw e;
           }
         } else {
-          // Fallback: accumulate in memory (works everywhere, but limited by RAM)
-          const blobParts = [];
-          await sdk.downloadStreaming(obj,
-            (chunk) => {
-              blobParts.push(chunk);
-              bytesDownloaded += chunk.length; // Track actual bytes
-            },
-            (current, total) => {
-              currentSlab = current;
-              totalSlabs = total;
-            },
-          );
-          const blob = new Blob(blobParts);
+          // Memory fallback (no File System Access API)
+          const result = await parallelDownload(input, status, progress, 'Downloading');
+          bytesDownloaded = result.size;
+          const blob = result.blob;
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
           a.download = filename;
@@ -1545,12 +2004,12 @@
           URL.revokeObjectURL(a.href);
         }
 
-        clearInterval(progressInterval); // Stop progress updates
+        clearInterval(progressInterval);
         const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
         progress.value = progress.max;
         status.innerHTML = `File: ${filename}\nSize: ${formatSize(size)}\nDownloaded in ${elapsed}s\n<span class="pass">Saved to disk!</span>`;
       } catch (e) {
-        clearInterval(progressInterval); // Stop progress updates on error
+        if (progressInterval) clearInterval(progressInterval);
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
     });
@@ -1948,8 +2407,6 @@
 
         const expiresAt = new Date(validUntilMs).toLocaleString();
         status.innerHTML = `<span class="pass">Share link created!</span>\nExpires: ${expiresAt}\n\n<a href="${shareUrl}" target="_blank" rel="noopener" style="color:#60a5fa; word-break:break-all;">${shareUrl}</a>`;
-
-        document.getElementById('share-url').value = shareUrl;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
@@ -2223,6 +2680,7 @@
       const progress = document.getElementById('iframe-progress');
       const iframe = document.getElementById('html-iframe');
       const videoContainer = document.getElementById('video-container');
+      const canvas = document.getElementById('stream-canvas');
       const video = document.getElementById('mse-video');
 
       progress.style.display = 'none';
@@ -2238,7 +2696,7 @@
         const sdk = await connectSdk(status);
         if (!sdk) return;
 
-        // For video items, re-stream via MSE
+        // For video items, re-stream via WebCodecs (or MSE fallback)
         if (item.fileType === 'video') {
           status.textContent = 'Re-streaming video...';
           const obj = item.originalUrl.startsWith('sia://')
@@ -2248,21 +2706,41 @@
           iframe.style.display = 'none';
           videoContainer.style.display = 'block';
 
-          const result = await transmuxAndStream(sdk, obj, video, status, progress);
-          activeBrowserStreamAbort = result;
+          // Try WebCodecs first
+          if (typeof VideoDecoder !== 'undefined') {
+            try {
+              canvas.style.display = 'block';
+              video.style.display = 'none';
+              const result = await webcodecStream(sdk, obj, canvas, status, progress, item.originalUrl);
+              activeBrowserStreamAbort = result;
+              status.innerHTML = `<span class="pass">${status.textContent}</span>`;
+              updateBrowserUI();
+              return;
+            } catch (e) {
+              console.error('[browser] WebCodecs re-stream failed:', e);
+            }
+          }
 
-          status.innerHTML = `<span class="pass">${status.textContent}</span>`;
-          updateBrowserUI();
-          return;
+          // Fall back to MSE
+          try {
+            canvas.style.display = 'none';
+            video.style.display = 'block';
+            const result = await transmuxAndStream(sdk, obj, video, status, progress);
+            activeBrowserStreamAbort = result;
+            status.innerHTML = `<span class="pass">${status.textContent}</span>`;
+            updateBrowserUI();
+            return;
+          } catch (e) {
+            console.error('[browser] MSE re-stream failed:', e);
+            videoContainer.style.display = 'none';
+            iframe.style.display = 'block';
+            status.textContent = 'Streaming failed, re-downloading...';
+          }
         }
 
         status.textContent = `Re-downloading ${item.fileType}...`;
 
-        const obj = item.originalUrl.startsWith('sia://')
-          ? await sdk.sharedObject(item.originalUrl)
-          : await sdk.object(item.originalUrl);
-
-        const { blob: downloadedBlob } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
+        const { blob: downloadedBlob } = await parallelDownload(item.originalUrl, status, progress, 'Downloading');
         const data = new Uint8Array(await downloadedBlob.arrayBuffer());
 
         // Create blob with appropriate MIME type and wrapper
@@ -2367,289 +2845,23 @@
       }
     });
 
-    // Generic function to load content with specified MIME type
-    async function loadContentAs(mimeType, typeLabel) {
-      const addressBar = document.getElementById('address-bar');
-      const url = addressBar.value.trim();
-
-      if (!url) {
-        const status = document.getElementById('iframe-status');
-        status.innerHTML = '<span style="color:#f59e0b">⚠️ Enter a URL in the address bar first.</span>';
-        return;
-      }
-
-      const status = document.getElementById('iframe-status');
-      const progress = document.getElementById('iframe-progress');
-      const iframe = document.getElementById('html-iframe');
-
-      progress.style.display = 'none';
-      progress.value = 0;
-
-      try {
-        const sdk = await connectSdk(status);
-        if (!sdk) return;
-
-        status.textContent = `Fetching ${typeLabel}...`;
-        const obj = url.startsWith('sia://')
-          ? await sdk.sharedObject(url)
-          : await sdk.object(url);
-        const size = obj.size();
-
-        const { blob: downloadedBlob, elapsed } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
-
-        // Create blob with appropriate wrapper for better display
-        let blobUrl;
-        if (mimeType === 'text/plain') {
-          // Wrap text in styled HTML for better readability
-          const text = new TextDecoder().decode(new Uint8Array(await downloadedBlob.arrayBuffer()));
-          const escapedText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:'Courier New',monospace;padding:1.5rem;background:#0a0a0a;color:#e0e0e0;margin:0;}pre{white-space:pre-wrap;word-wrap:break-word;margin:0;line-height:1.5;}</style></head><body><pre>${escapedText}</pre></body></html>`;
-          const blob = new Blob([html], { type: 'text/html' });
-          blobUrl = URL.createObjectURL(blob);
-        } else if (mimeType === 'audio/mpeg') {
-          // Wrap audio in HTML with styled player
-          const audioBlob = new Blob([downloadedBlob], { type: mimeType });
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0;font-family:system-ui,sans-serif;}audio{width:90%;max-width:600px;}</style></head><body><h2 style="margin-bottom:2rem;">🎵 Audio Player</h2><audio controls autoplay><source src="${audioUrl}" type="${mimeType}">Your browser does not support the audio element.</audio></body></html>`;
-          const blob = new Blob([html], { type: 'text/html' });
-          blobUrl = URL.createObjectURL(blob);
-        } else {
-          // For other types (image, video, html), load directly
-          blobUrl = URL.createObjectURL(new Blob([downloadedBlob], { type: mimeType }));
-        }
-
-        iframe.src = blobUrl;
-
-        // Add to history
-        const displayUrl = `${typeLabel}: ${url}`;
-        const fileType = typeLabel.toLowerCase();
-        addToHistory(displayUrl, blobUrl, displayUrl, false, url, fileType);
-
-        status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">${typeLabel} loaded!</span>`;
-      } catch (e) {
-        status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
-      }
-    }
-
-    // PDF loader - opens in new tab (Chrome blocks PDFs in sandboxed iframes)
-    async function loadPdfInNewTab() {
-      const addressBar = document.getElementById('address-bar');
-      const url = addressBar.value.trim();
-
-      if (!url) {
-        const status = document.getElementById('iframe-status');
-        status.innerHTML = '<span style="color:#f59e0b">⚠️ Enter a URL in the address bar first.</span>';
-        return;
-      }
-
-      const status = document.getElementById('iframe-status');
-      const progress = document.getElementById('iframe-progress');
-
-      progress.style.display = 'none';
-      progress.value = 0;
-
-      try {
-        const sdk = await connectSdk(status);
-        if (!sdk) return;
-
-        status.textContent = 'Fetching PDF...';
-        const obj = url.startsWith('sia://')
-          ? await sdk.sharedObject(url)
-          : await sdk.object(url);
-        const size = obj.size();
-
-        const { blob: downloadedBlob, elapsed } = await streamingDownload(sdk, obj, status, progress, 'Downloading PDF');
-
-        // Open PDF in new tab
-        const blob = new Blob([downloadedBlob], { type: 'application/pdf' });
-        const blobUrl = URL.createObjectURL(blob);
-        window.open(blobUrl, '_blank');
-
-        // Add to history with external flag (PDFs open in new tabs)
-        const displayUrl = `PDF: ${url}`;
-        addToHistory(displayUrl, blobUrl, displayUrl, true, url, 'pdf');
-
-        status.innerHTML = `Size: ${formatSize(size)}\nLoaded in ${elapsed}s\n<span class="pass">PDF opened in new tab!</span>`;
-      } catch (e) {
-        status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
-      }
-    }
-
-    // Progressive video streaming using Media Source Extensions
-    async function streamVideo(sdk, obj, mimeType, status, progress) {
-      // TODO: MSE requires proper MP4 initialization segments (moov/ftyp boxes)
-      // The raw slab data doesn't have the correct MP4 structure for MSE
-      // For now, disable MSE - full download works reliably
-      console.log('⚠️  MSE disabled (needs MP4 fragmentation) - using full download');
-      return null;
-
-      /* Disabled until we can generate proper fragmented MP4
-      if (!window.MediaSource) {
-        console.log('MSE not available - falling back to full download');
-        return null;
-      }
-
-      // Test codec support BEFORE creating MediaSource
-      const codecStrings = [
-        'video/mp4; codecs="avc1.42E01E, mp4a.40.2"', // H.264 Baseline + AAC-LC
-        'video/mp4; codecs="avc1.640028, mp4a.40.2"', // H.264 High + AAC-LC
-        'video/mp4; codecs="avc1.64001F, mp4a.40.2"', // H.264 High 3.1
-        'video/mp4; codecs="hvc1.1.6.L153.B0, mp4a.40.2"', // HEVC Main + AAC
-        'video/mp4; codecs="hev1.1.6.L153.B0, mp4a.40.2"', // HEVC alternative
-      ];
-
-      console.log('🔍 Testing codec support...');
-      let selectedCodec = null;
-      for (const codec of codecStrings) {
-        const isSupported = MediaSource.isTypeSupported(codec);
-        console.log(`  ${isSupported ? '✅' : '❌'} ${codec}`);
-        if (isSupported && !selectedCodec) {
-          selectedCodec = codec;
-        }
-      }
-
-      if (!selectedCodec) {
-        console.log('❌ No supported codec - falling back');
-        return null;
-      }
-
-      console.log('✨ Will use codec:', selectedCodec);
-
-      // Now create MediaSource
-      return new Promise((resolve, reject) => {
-        const mediaSource = new MediaSource();
-        const videoUrl = URL.createObjectURL(mediaSource);
-
-        // CRITICAL: Attach to video element BEFORE waiting for sourceopen
-        // The sourceopen event won't fire until the video starts loading the MediaSource
-        const video = document.getElementById('mse-video');
-        const videoContainer = document.getElementById('video-container');
-        const iframe = document.getElementById('html-iframe');
-
-        // Show video, hide iframe
-        iframe.style.display = 'none';
-        videoContainer.style.display = 'block';
-        video.src = videoUrl; // This triggers sourceopen!
-        console.log('📺 Video element attached, waiting for sourceopen...');
-
-        let sourceBuffer = null;
-        let downloadComplete = false;
-        let appendQueue = [];
-        let isAppending = false;
-
-        mediaSource.addEventListener('sourceopen', async () => {
-          console.log('✅ MediaSource opened!');
-          try {
-            sourceBuffer = mediaSource.addSourceBuffer(selectedCodec);
-            console.log('🎬 SourceBuffer created, starting download...')
-
-            // Process append queue when buffer is ready
-            sourceBuffer.addEventListener('updateend', () => {
-              isAppending = false;
-              processQueue();
-            });
-
-            sourceBuffer.addEventListener('error', (e) => {
-              console.error('SourceBuffer error:', e);
-              reject(new Error('SourceBuffer error'));
-            });
-
-            // Start downloading
-            const chunks = [];
-            await sdk.downloadStreaming(obj,
-              (chunk) => {
-                // Accumulate chunks for current slab
-                chunks.push(chunk);
-              },
-              (current, total) => {
-                // On slab completion, queue the slab data for append
-                if (chunks.length > 0) {
-                  const slabData = new Uint8Array(
-                    chunks.reduce((acc, c) => acc + c.length, 0)
-                  );
-                  let offset = 0;
-                  for (const chunk of chunks) {
-                    slabData.set(chunk, offset);
-                    offset += chunk.length;
-                  }
-                  appendQueue.push(slabData);
-                  chunks.length = 0;
-                  processQueue();
-                }
-
-                // Update progress
-                progress.max = total;
-                progress.value = current;
-                status.textContent = `Streaming video... ${current}/${total} slabs`;
-              }
-            );
-
-            // Append any remaining chunks
-            if (chunks.length > 0) {
-              const slabData = new Uint8Array(
-                chunks.reduce((acc, c) => acc + c.length, 0)
-              );
-              let offset = 0;
-              for (const chunk of chunks) {
-                slabData.set(chunk, offset);
-                offset += chunk.length;
-              }
-              appendQueue.push(slabData);
-              chunks.length = 0;
-            }
-
-            downloadComplete = true;
-            processQueue();
-
-            resolve({ videoUrl, mediaSource });
-
-          } catch (error) {
-            console.error('MSE setup error:', error);
-            reject(error);
-          }
-        });
-
-        function processQueue() {
-          if (isAppending || !sourceBuffer || appendQueue.length === 0) {
-            // Check if we're done
-            if (downloadComplete && appendQueue.length === 0 && !isAppending) {
-              if (mediaSource.readyState === 'open') {
-                mediaSource.endOfStream();
-                console.log('Video streaming complete');
-              }
-            }
-            return;
-          }
-
-          const data = appendQueue.shift();
-          isAppending = true;
-
-          try {
-            sourceBuffer.appendBuffer(data);
-          } catch (e) {
-            console.error('appendBuffer error:', e);
-            isAppending = false;
-            // Try again after a delay
-            setTimeout(() => processQueue(), 100);
-          }
-        }
-
-        mediaSource.addEventListener('error', (e) => {
-          console.error('MediaSource error:', e);
-          reject(new Error('MediaSource error'));
-        });
-      });
-      */
-    }
 
     // Auto-detect file type using MIME sniffing
+    let loadContentInProgress = false;
     async function loadContentWithAutoDetect() {
+      if (loadContentInProgress) {
+        console.log('[browser] loadContentWithAutoDetect already in progress, ignoring');
+        return;
+      }
+      loadContentInProgress = true;
+
       const addressBar = document.getElementById('address-bar');
       const url = addressBar.value.trim();
 
       if (!url) {
         const status = document.getElementById('iframe-status');
         status.innerHTML = '<span style="color:#f59e0b">⚠️ Enter a URL in the address bar first.</span>';
+        loadContentInProgress = false;
         return;
       }
 
@@ -2657,11 +2869,14 @@
       const progress = document.getElementById('iframe-progress');
       const iframe = document.getElementById('html-iframe');
       const videoContainer = document.getElementById('video-container');
+      const canvas = document.getElementById('stream-canvas');
       const video = document.getElementById('mse-video');
 
       // Reset display: show iframe, hide video
       iframe.style.display = 'block';
       videoContainer.style.display = 'none';
+      canvas.style.display = 'block';
+      video.style.display = 'none';
       video.src = '';
 
       progress.style.display = 'none';
@@ -2683,41 +2898,62 @@
           : await sdk.object(url);
         const size = obj.size();
 
-        // Check if this is an MP4 file that can be streamed via MSE
-        // MP4 files start with an ftyp box: bytes 4-7 are "ftyp"
-        const isMp4 = size > 40000000 && window.MediaSource; // Only stream files > 40MB with MSE support
-        // For large video files, use MSE streaming instead of full download
-        if (isMp4) {
-          status.textContent = 'Large file detected. Attempting MSE streaming...';
-          try {
-            // Switch to video container
-            iframe.style.display = 'none';
-            videoContainer.style.display = 'block';
+        // Large files: try streaming via WebCodecs (preferred) or MSE (fallback)
+        const canStream = size > 40000000;
+        if (canStream) {
+          // Try WebCodecs first (handles B-frames, all codecs the browser supports)
+          if (typeof VideoDecoder !== 'undefined') {
+            status.textContent = 'Large file detected. Attempting WebCodecs streaming...';
+            try {
+              iframe.style.display = 'none';
+              videoContainer.style.display = 'block';
+              canvas.style.display = 'block';
+              video.style.display = 'none';
 
-            const result = await transmuxAndStream(sdk, obj, video, status, progress);
-            activeBrowserStreamAbort = result;
+              const result = await webcodecStream(sdk, obj, canvas, status, progress, url);
+              activeBrowserStreamAbort = result;
 
-            // Add to history
-            const displayUrl = `Video (streaming): ${url}`;
-            addToHistory(displayUrl, null, displayUrl, false, url, 'video');
-
-            status.innerHTML = `<span class="pass">${status.textContent}</span>`;
-            return;
-          } catch (streamErr) {
-            // Streaming failed (not MP4, moov at end, unsupported codec, etc.)
-            // Fall through to full download path
-            console.log('[browser] MSE streaming failed, falling back to full download:', streamErr.message);
-            activeBrowserStreamAbort = null;
-            iframe.style.display = 'block';
-            videoContainer.style.display = 'none';
-            video.src = '';
-            status.textContent = 'Streaming unavailable, downloading full file...';
+              const displayUrl = `Video (streaming): ${url}`;
+              addToHistory(displayUrl, null, displayUrl, false, url, 'video');
+              status.innerHTML = `<span class="pass">${status.textContent}</span>`;
+              return;
+            } catch (wcErr) {
+              console.error('[browser] WebCodecs streaming failed:', wcErr);
+              activeBrowserStreamAbort = null;
+            }
           }
+
+          // Fall back to MSE if WebCodecs failed or unavailable
+          if (window.MediaSource) {
+            status.textContent = 'Trying MSE streaming...';
+            try {
+              iframe.style.display = 'none';
+              videoContainer.style.display = 'block';
+              canvas.style.display = 'none';
+              video.style.display = 'block';
+
+              const result = await transmuxAndStream(sdk, obj, video, status, progress);
+              activeBrowserStreamAbort = result;
+
+              const displayUrl = `Video (streaming): ${url}`;
+              addToHistory(displayUrl, null, displayUrl, false, url, 'video');
+              status.innerHTML = `<span class="pass">${status.textContent}</span>`;
+              return;
+            } catch (mseErr) {
+              console.error('[browser] MSE streaming failed, falling back to full download:', mseErr);
+              activeBrowserStreamAbort = null;
+            }
+          }
+
+          // Both streaming methods failed — fall through to full download
+          iframe.style.display = 'block';
+          videoContainer.style.display = 'none';
+          status.textContent = 'Streaming unavailable, downloading full file...';
         }
 
         // Full download path (non-video files or streaming fallback)
         status.textContent = 'Downloading...';
-        const result = await streamingDownload(sdk, obj, status, progress, 'Downloading');
+        const result = await parallelDownload(url, status, progress, 'Downloading');
         const downloadedBlob = result.blob;
 
         // Detect type from the full file
@@ -2785,7 +3021,7 @@
           // Video that was too small to stream or streaming failed — use iframe player
           const videoBlob = new Blob([downloadedBlob], { type: mimeType });
           const videoUrl = URL.createObjectURL(videoBlob);
-          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0;font-family:system-ui,sans-serif;padding:2rem;}video{width:100%;max-width:1200px;background:#000;}</style></head><body><h2 style="margin-bottom:1rem;">🎬 Video Player</h2><video controls autoplay><source src="${videoUrl}" type="${mimeType}">Your browser does not support the video element.</video><p style="margin-top:1rem;color:#888;">File size: ${formatSize(size)} | Type: ${mimeType}</p></body></html>`;
+          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0;font-family:system-ui,sans-serif;padding:2rem;}video{width:100%;max-width:1200px;background:#000;}</style></head><body><video controls autoplay><source src="${videoUrl}" type="${mimeType}">Your browser does not support the video element.</video><p style="margin-top:1rem;color:#888;">File size: ${formatSize(size)} | Type: ${mimeType}</p></body></html>`;
           const blob = new Blob([html], { type: 'text/html' });
           blobUrl = URL.createObjectURL(blob);
 
@@ -2831,6 +3067,8 @@
         status.innerHTML = `Size: ${formatSize(size)}\nDetected: ${mimeType}\nLoaded in ${elapsed}s\n<span class="pass">${typeLabel} loaded!</span>`;
       } catch (e) {
         status.innerHTML = `<span class="fail">Error: ${e.message}</span>`;
+      } finally {
+        loadContentInProgress = false;
       }
     }
 
@@ -2873,15 +3111,9 @@
       progress.value = 0;
 
       try {
-        const sdk = await connectSdk(status);
-        if (!sdk) return;
-
         status.textContent = 'Downloading for external tab...';
-        const obj = url.startsWith('sia://')
-          ? await sdk.sharedObject(url)
-          : await sdk.object(url);
 
-        const { blob: downloadedBlob } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
+        const { blob: downloadedBlob } = await parallelDownload(url, status, progress, 'Downloading');
 
         // Detect MIME type
         status.textContent = 'Detecting file type...';
@@ -2950,14 +3182,9 @@
         progress.value = 0;
 
         try {
-          const sdk = await connectSdk(status);
-          if (!sdk) return;
-
           status.textContent = `Loading ${title || 'file'}...`;
-          const obj = await sdk.sharedObject(url);
-          const size = obj.size();
 
-          const { blob, elapsed } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
+          const { blob, elapsed, size } = await parallelDownload(url, status, progress, 'Downloading');
 
           // Load into iframe (let browser detect content type)
           const blobUrl = URL.createObjectURL(blob);
@@ -2980,14 +3207,9 @@
         progress.value = 0;
 
         try {
-          const sdk = await connectSdk(status);
-          if (!sdk) return;
-
           status.textContent = `Downloading ${title || 'file'}...`;
-          const obj = await sdk.sharedObject(url);
-          const size = obj.size();
 
-          const { blob, elapsed } = await streamingDownload(sdk, obj, status, progress, 'Downloading');
+          const { blob, elapsed, size } = await parallelDownload(url, status, progress, 'Downloading');
 
           // Open in new tab (let browser detect content type)
           const blobUrl = URL.createObjectURL(blob);
@@ -3004,6 +3226,909 @@
     });
 
     // ===== Stream Video Section =====
+
+    // --- WebCodecs streaming pipeline (handles B-frames correctly) ---
+
+    async function webcodecStream(sdk, obj, canvasEl, statusEl, progressEl, objectUrl) {
+      if (typeof VideoDecoder === 'undefined') {
+        throw new Error('WebCodecs API not supported in this browser');
+      }
+
+      const totalSize = obj.size();
+      statusEl.textContent = `File size: ${formatSize(totalSize)}. Initializing WebCodecs...`;
+
+      const mp4box = createMP4Box();
+
+      // State
+      let byteOffset = 0;
+      let downloadComplete = false;
+      let mp4boxReady = false;
+      let aborted = false;
+      let resolveAbort, rejectAbort;
+      const abortPromise = new Promise((resolve, reject) => {
+        resolveAbort = resolve;
+        rejectAbort = reject;
+      });
+
+      // WebCodecs video decoder
+      let videoDecoder = null;
+
+      // Video rendering
+      const ctx = canvasEl.getContext('2d');
+      const frameBuffer = []; // holds only UNDISPLAYED future frames
+      const FRAME_BUFFER_MAX = 6;
+      let renderLoopRunning = false;
+      let canvasSized = false;
+      let paused = false;
+      let pauseOffsetUs = 0; // microseconds of media time accumulated before pause
+
+      // Audio via MSE (hidden <audio> element with SourceBuffer)
+      let audioEl = null;
+      let audioMediaSource = null;
+      let audioSourceBuffer = null;
+      const audioAppendQueue = [];
+      let audioSbAppending = false;
+      let hasAudio = false;
+      let audioMode = null; // 'fmp4-mse' (setSegmentOptions) or 'raw-mse' (setExtractionOptions → audio/mpeg)
+
+      // Video-only timing (used when no audio clock is available)
+      let wallClockStart = 0;   // performance.now() when first frame is displayed
+      let videoTimeBase = -1;   // PTS (microseconds) of the first displayed video frame
+      let wallClockSynced = false; // true once first frame display establishes timing
+
+      // Stall compensation: when the main thread is blocked (WASM slab processing),
+      // rAF stops firing. When it resumes, the wall clock has jumped forward.
+      // Instead of skipping frames (visible stutter), we absorb the excess time
+      // so the video effectively "pauses" during the stall and resumes smoothly.
+      let lastRafTime = 0;
+      const STALL_THRESHOLD_MS = 50; // gaps longer than 3 frames at 60fps = stall
+      const NORMAL_FRAME_MS = 16.67; // expected rAF interval at 60Hz
+
+      // Controls state
+      let mediaDuration = 0; // from mp4box info, seconds
+      let videoTrackId = null;
+      let audioTrackId = null;
+
+      // Seek state
+      let isSeeking = false;        // true while user is dragging the scrub bar
+      let seekInProgress = false;   // prevents concurrent seeks
+      let pendingSeekTime = null;   // queued seek during an in-progress seek
+      let seekPendingDraw = false;  // true after seekTo(), cleared after drawing one frame while paused
+      let bufferedDurationSec = 0;
+      let lastBufferedUpdateTime = 0;
+
+      // Returns current media time in microseconds
+      function getCurrentMediaTimeUs() {
+        if (paused) return pauseOffsetUs;
+        if (hasAudio && audioEl) {
+          // Always use audio as the clock when audio is active.
+          // Stall video (return -1) until audio actually starts playing,
+          // so video and audio are in sync from the very first frame.
+          if (audioEl.paused || audioEl.currentTime === 0) return -1;
+          return audioEl.currentTime * 1e6;
+        }
+        // No audio: use wall clock synced to first displayed frame
+        if (!wallClockSynced) return -1; // timing not yet established
+        const elapsedUs = (performance.now() - wallClockStart) * 1000;
+        return videoTimeBase + elapsedUs;
+      }
+
+      // Returns the duration (seconds) up to which video data has been downloaded.
+      function getBufferedDuration() {
+        if (!mp4boxReady || videoTrackId === null) return 0;
+        try {
+          const samples = mp4box.getTrackSamplesInfo(videoTrackId);
+          if (!samples || samples.length === 0) return 0;
+          for (let i = samples.length - 1; i >= 0; i--) {
+            if (samples[i].alreadyRead === samples[i].size) {
+              const s = samples[i];
+              return (s.cts + s.duration) / s.timescale;
+            }
+          }
+        } catch (e) {}
+        return 0;
+      }
+
+      function getBufferedDurationThrottled() {
+        const now = performance.now();
+        if (now - lastBufferedUpdateTime < 1000) return bufferedDurationSec;
+        lastBufferedUpdateTime = now;
+        bufferedDurationSec = getBufferedDuration();
+        return bufferedDurationSec;
+      }
+
+      async function seekTo(timeSec) {
+        if (!mp4boxReady || mediaDuration <= 0) return;
+
+        if (seekInProgress) {
+          pendingSeekTime = timeSec;
+          return;
+        }
+        seekInProgress = true;
+
+        // Clamp to buffered range
+        const maxSeekable = downloadComplete ? mediaDuration : getBufferedDuration();
+        timeSec = Math.max(0, Math.min(timeSec, maxSeekable - 0.1));
+
+        console.log(`[webcodec] seekTo: ${timeSec.toFixed(2)}s (buffered: ${maxSeekable.toFixed(2)}s)`);
+
+        // 1. Stop mp4box sample extraction
+        mp4box.stop();
+
+        // 2. Flush VideoDecoder — drains in-flight decodes
+        if (videoDecoder && videoDecoder.state === 'configured') {
+          try {
+            await videoDecoder.flush();
+          } catch (e) {
+            console.warn('[webcodec] decoder flush on seek:', e);
+          }
+        }
+
+        // 3. Clear pending video samples and frame buffer
+        pendingVideoSamples.length = 0;
+        while (frameBuffer.length > 0) frameBuffer.shift().close();
+
+        // 4. Seek mp4box to nearest keyframe
+        mp4box.seek(timeSec, true);
+
+        // 5. Reset timing
+        const seekTimeUs = timeSec * 1e6;
+        pauseOffsetUs = seekTimeUs;
+        videoTimeBase = seekTimeUs;
+        wallClockStart = performance.now();
+        wallClockSynced = true;
+        lastRafTime = wallClockStart;
+
+        // 6. Handle audio seek
+        if (hasAudio && audioEl) {
+          audioAppendQueue.length = 0;
+
+          // Abort any in-progress SourceBuffer operation
+          if (audioSourceBuffer && audioSourceBuffer.updating) {
+            try { audioSourceBuffer.abort(); } catch (e) {}
+            audioSbAppending = false;
+          }
+
+          // For raw-mse, set timestampOffset so new data is positioned correctly
+          if (audioMode === 'raw-mse' && audioSourceBuffer) {
+            try { audioSourceBuffer.timestampOffset = timeSec; } catch (e) {}
+          }
+
+          audioEl.currentTime = timeSec;
+          if (paused) {
+            audioEl.pause();
+          } else {
+            audioEl.play().catch(() => {});
+          }
+        }
+
+        // 7. Re-anchor wall clock for non-audio case
+        if (!hasAudio && !paused) {
+          wallClockStart = performance.now();
+          videoTimeBase = seekTimeUs;
+        }
+
+        // 8. Restart mp4box extraction from new position
+        seekPendingDraw = true;
+        mp4box.start();
+
+        seekInProgress = false;
+
+        // If another seek was requested during this one, execute it
+        if (pendingSeekTime !== null) {
+          const t = pendingSeekTime;
+          pendingSeekTime = null;
+          seekTo(t);
+        }
+      }
+
+      // --- Video frame rendering ---
+      // Key design: frames are CONSUMED (shifted + closed) immediately after drawing.
+      // The canvas retains the drawn pixels, so we don't need to hold the VideoFrame.
+      // This frees buffer slots so the decoder output callback doesn't evict
+      // undisplayed frames.
+      function renderLoop() {
+        if (aborted) {
+          while (frameBuffer.length > 0) frameBuffer.shift().close();
+          return;
+        }
+
+        // Stall compensation: if the main thread was blocked (WASM slab processing,
+        // mp4box parsing), absorb the excess time so the clock doesn't jump forward.
+        // This makes the video "pause" during stalls instead of skipping frames.
+        const now = performance.now();
+        if (lastRafTime > 0 && wallClockSynced && !hasAudio && !paused) {
+          const gapMs = now - lastRafTime;
+          if (gapMs > STALL_THRESHOLD_MS) {
+            const excessMs = gapMs - NORMAL_FRAME_MS;
+            wallClockStart += excessMs; // shift clock forward = time "didn't pass"
+          }
+        }
+        lastRafTime = now;
+
+        // Drip-feed queued samples to decoders (backpressure via decodeQueueSize)
+        feedSamples();
+
+        if (paused) {
+          // After a seek while paused, draw the first available frame as a preview
+          if (seekPendingDraw && frameBuffer.length > 0) {
+            seekPendingDraw = false;
+            let frameToDraw = null;
+            while (frameBuffer.length > 0) {
+              if (frameToDraw) frameToDraw.close();
+              frameToDraw = frameBuffer.shift();
+            }
+            if (frameToDraw) {
+              ctx.drawImage(frameToDraw, 0, 0, canvasEl.width, canvasEl.height);
+              frameToDraw.close();
+            }
+          }
+          requestAnimationFrame(renderLoop);
+          return;
+        }
+
+        // Establish timing on first available frame (not on onReady)
+        if (!wallClockSynced && !hasAudio && frameBuffer.length > 0) {
+          videoTimeBase = frameBuffer[0].timestamp; // microseconds
+          wallClockStart = performance.now();
+          wallClockSynced = true;
+          lastRafTime = wallClockStart; // reset so first real frame doesn't trigger stall detection
+          console.log(`[webcodec] timing synced: videoTimeBase=${videoTimeBase} bufLen=${frameBuffer.length}`);
+        }
+
+        const mediaTimeUs = getCurrentMediaTimeUs();
+        if (mediaTimeUs < 0) {
+          requestAnimationFrame(renderLoop);
+          return;
+        }
+
+        // Find the latest frame whose time has arrived, consume all older ones
+        let frameToDraw = null;
+        while (frameBuffer.length > 0 && frameBuffer[0].timestamp <= mediaTimeUs) {
+          if (frameToDraw) frameToDraw.close(); // skip intermediate frames
+          frameToDraw = frameBuffer.shift();
+        }
+
+        if (frameToDraw) {
+          // Size canvas to video's native resolution for full quality rendering.
+          // CSS object-fit:contain handles display scaling without quality loss.
+          if (!canvasSized) {
+            canvasEl.width = frameToDraw.displayWidth;
+            canvasEl.height = frameToDraw.displayHeight;
+            canvasSized = true;
+            console.log(`[webcodec] canvas sized to native ${frameToDraw.displayWidth}x${frameToDraw.displayHeight}`);
+          }
+
+          ctx.drawImage(frameToDraw, 0, 0, canvasEl.width, canvasEl.height);
+          frameToDraw.close();
+        }
+        // else: no new frame ready — canvas retains the last drawn content
+
+        // Update time display and seek bar
+        const mediaTimeSec = mediaTimeUs / 1e6;
+        const timeEl = document.getElementById('vc-time');
+        if (timeEl) {
+          const m = Math.floor(mediaTimeSec / 60);
+          const s = Math.floor(mediaTimeSec % 60);
+          const pad = s < 10 ? '0' : '';
+          if (mediaDuration > 0) {
+            const dm = Math.floor(mediaDuration / 60);
+            const ds = Math.floor(mediaDuration % 60);
+            const dpad = ds < 10 ? '0' : '';
+            timeEl.textContent = `${m}:${pad}${s} / ${dm}:${dpad}${ds}`;
+          } else {
+            timeEl.textContent = `${m}:${pad}${s}`;
+          }
+        }
+
+        // Update seek bar (unless user is dragging)
+        if (!isSeeking && mediaDuration > 0) {
+          const playedPct = Math.min(100, (mediaTimeSec / mediaDuration) * 100);
+          if (seekPlayedEl) seekPlayedEl.style.width = playedPct + '%';
+          if (seekThumbEl) seekThumbEl.style.left = playedPct + '%';
+
+          // Update buffered indicator (throttled to 1Hz)
+          const bufDur = getBufferedDurationThrottled();
+          const bufPct = Math.min(100, (bufDur / mediaDuration) * 100);
+          if (seekBufferedEl) seekBufferedEl.style.width = bufPct + '%';
+        }
+
+        requestAnimationFrame(renderLoop);
+      }
+
+      let framesReceived = 0;
+      function bufferVideoFrame(frame) {
+        if (aborted) { frame.close(); return; }
+        framesReceived++;
+        if (framesReceived <= 5) {
+          console.log(`[webcodec] bufferVideoFrame #${framesReceived}: ts=${frame.timestamp} bufLen=${frameBuffer.length}`);
+        }
+        // No eviction — feed rate is controlled to prevent overflow
+        frameBuffer.push(frame);
+      }
+
+      // --- Rate-controlled sample feeding ---
+      // Feed based on total pipeline depth (decode queue + frame buffer).
+      // At most 1 video sample per call to prevent flooding.
+      const pendingVideoSamples = [];
+      const PIPELINE_MAX = 12; // max total items in decode queue + frame buffer
+
+      let samplesFed = 0;
+      function feedSamples() {
+        if (!videoDecoder || videoDecoder.state !== 'configured') return;
+        // Feed more aggressively when buffer is empty (startup / seeking)
+        // Otherwise feed 2 per tick (handles up to 120fps video at 60Hz display)
+        const maxFeed = frameBuffer.length === 0 ? 8 : 2;
+        let fed = 0;
+        while (pendingVideoSamples.length > 0 && fed < maxFeed) {
+          const pipelineDepth = videoDecoder.decodeQueueSize + frameBuffer.length;
+          if (pipelineDepth >= PIPELINE_MAX) break;
+          const s = pendingVideoSamples.shift();
+          fed++;
+          samplesFed++;
+          if (samplesFed <= 10) {
+            console.log(`[webcodec] feed #${samplesFed}: cts=${s.cts} sync=${s.is_sync} pipeline=${pipelineDepth} pending=${pendingVideoSamples.length}`);
+          }
+          try {
+            videoDecoder.decode(new EncodedVideoChunk({
+              type: s.is_sync ? 'key' : 'delta',
+              timestamp: (s.cts * 1e6) / s.timescale,
+              duration: (s.duration * 1e6) / s.timescale,
+              data: s.data,
+            }));
+          } catch (e) {}
+        }
+        // Audio is handled via MSE (onSegment → SourceBuffer), not WebCodecs
+      }
+
+      // --- Audio via MSE: drain fMP4 segments into SourceBuffer ---
+      function drainAudioQueue() {
+        if (!audioSourceBuffer || audioSbAppending || audioAppendQueue.length === 0) return;
+        if (audioMediaSource.readyState !== 'open') return;
+        const buf = audioAppendQueue.shift();
+        audioSbAppending = true;
+        try {
+          audioSourceBuffer.appendBuffer(buf);
+        } catch (e) {
+          audioSbAppending = false;
+          if (e.name === 'QuotaExceededError') {
+            audioAppendQueue.unshift(buf);
+            // Evict old audio data
+            if (audioSourceBuffer.buffered.length > 0 && audioEl) {
+              const removeEnd = audioEl.currentTime - 5;
+              if (removeEnd > audioSourceBuffer.buffered.start(0)) {
+                audioSourceBuffer.remove(audioSourceBuffer.buffered.start(0), removeEnd);
+              }
+            }
+          } else {
+            console.warn('[webcodec] Audio appendBuffer error:', e);
+          }
+        }
+      }
+
+      function maybeEndAudioStream() {
+        if (!downloadComplete || audioAppendQueue.length > 0 || audioSbAppending) return;
+        if (audioMediaSource && audioMediaSource.readyState === 'open') {
+          try { audioMediaSource.endOfStream(); } catch (e) {}
+        }
+      }
+
+      // --- Codec description extraction (W3C WebCodecs pattern) ---
+      function getCodecDescription(box) {
+        const stream = new DataStream(undefined, 0, Endianness.BIG_ENDIAN);
+        box.write(stream);
+        return new Uint8Array(stream.buffer, 8); // Skip 8-byte box header (size + type)
+      }
+
+      // --- mp4box onReady: configure WebCodecs decoders ---
+      // IMPORTANT: This handler MUST be fully synchronous. mp4box calls onReady
+      // synchronously during appendBuffer(). If we use async/await, the handler
+      // yields and mp4box continues processing samples without extraction options
+      // set, losing all samples from the current and subsequent buffers until
+      // the async handler resumes. setExtractionOptions + start() must happen
+      // before this function returns.
+      mp4box.onReady = (info) => {
+        mp4boxReady = true;
+        console.log('[webcodec] onReady. Tracks:', info.tracks.map(t => ({
+          id: t.id, codec: t.codec, video: !!t.video, audio: !!t.audio,
+          type: t.type, name: t.name
+        })));
+
+        // Duration from mp4box (in timescale units)
+        if (info.duration && info.timescale) {
+          mediaDuration = info.duration / info.timescale;
+        }
+
+        const mediaTracks = info.tracks.filter(t => t.video || t.audio);
+        if (mediaTracks.length === 0) {
+          rejectAbort(new Error('No video or audio tracks found'));
+          return;
+        }
+
+        const trackDescs = mediaTracks.map(t =>
+          `${t.video ? 'video' : 'audio'} (${t.codec})`
+        ).join(', ');
+        statusEl.textContent = `Tracks: ${trackDescs}. Configuring decoders...`;
+
+        // FIRST: set extraction options and start SYNCHRONOUSLY so mp4box
+        // begins extracting samples immediately from this appendBuffer call.
+        // We configure decoders below; onSamples will queue samples until ready.
+        videoTrackId = null;
+        audioTrackId = null;
+
+        for (const track of mediaTracks) {
+          if (track.video && videoTrackId === null) {
+            videoTrackId = track.id;
+          }
+        }
+
+        // Pick first audio track whose codec is supported by MSE.
+        // Pass 1: try fMP4 MSE (setSegmentOptions → onSegment → SourceBuffer with video/mp4 MIME)
+        // Pass 2: try raw MSE (setExtractionOptions → onSamples → SourceBuffer with audio/mpeg MIME)
+        let audioTrack = null;
+        if (audioMediaSource && audioMediaSource.readyState === 'open') {
+          // Pass 1: fMP4 MSE
+          for (const track of mediaTracks) {
+            if (!track.audio) continue;
+            const mime = `video/mp4; codecs="${track.codec}"`;
+            if (MediaSource.isTypeSupported(mime)) {
+              audioTrackId = track.id;
+              audioTrack = track;
+              audioMode = 'fmp4-mse';
+              console.log(`[webcodec] Selected audio track ${track.id}: ${track.codec} via fMP4 MSE (${mime})`);
+              break;
+            } else {
+              console.log(`[webcodec] Skipping audio track ${track.id}: ${track.codec} (${mime} not supported for fMP4 MSE)`);
+            }
+          }
+
+          // Pass 2: raw MSE — for codecs stored as raw frames (e.g. MP3 in MP4 container)
+          if (!audioTrack) {
+            const rawMimeMap = {
+              'mp4a.6b': 'audio/mpeg', // MP3 (MPEG-1 Layer 3, OTI 0x6B)
+              'mp4a.69': 'audio/mpeg', // MP3 (MPEG-2 Layer 3, OTI 0x69)
+            };
+            for (const track of mediaTracks) {
+              if (!track.audio) continue;
+              const rawMime = rawMimeMap[track.codec];
+              if (rawMime && MediaSource.isTypeSupported(rawMime)) {
+                audioTrackId = track.id;
+                audioTrack = track;
+                audioMode = 'raw-mse';
+                console.log(`[webcodec] Selected audio track ${track.id}: ${track.codec} via raw MSE (${rawMime})`);
+                break;
+              } else if (rawMime) {
+                console.log(`[webcodec] Skipping audio track ${track.id}: ${track.codec} (${rawMime} not supported for raw MSE)`);
+              }
+            }
+          }
+        }
+
+        // Video: raw samples via setExtractionOptions → onSamples → WebCodecs VideoDecoder
+        if (videoTrackId !== null) {
+          mp4box.setExtractionOptions(videoTrackId, 'video', { nbSamples: 200 });
+        }
+
+        // Audio setup: two paths depending on audioMode
+        if (audioTrack !== null && audioMode === 'fmp4-mse') {
+          // fMP4 MSE: setSegmentOptions → onSegment → SourceBuffer (video/mp4 MIME)
+          const audioMime = `video/mp4; codecs="${audioTrack.codec}"`;
+          mp4box.setSegmentOptions(audioTrackId, 'audio', { nbSamples: 100, rapAlignment: true });
+          const initResult = mp4box.initializeSegmentation();
+          console.log(`[webcodec] Audio fMP4 MSE: ${audioMime}, init segment: ${initResult.buffer?.byteLength} bytes`);
+
+          audioSourceBuffer = audioMediaSource.addSourceBuffer(audioMime);
+          audioSourceBuffer.addEventListener('updateend', () => {
+            audioSbAppending = false;
+            drainAudioQueue();
+            maybeEndAudioStream();
+          });
+          audioSourceBuffer.addEventListener('error', (e) => {
+            console.warn('[webcodec] Audio SourceBuffer error:', e);
+            hasAudio = false;
+          });
+
+          // Queue init segment
+          if (initResult.buffer) {
+            audioAppendQueue.push(initResult.buffer);
+            drainAudioQueue();
+          }
+
+          hasAudio = true;
+          audioEl.play().catch(e => console.warn('[webcodec] Audio autoplay blocked:', e.message));
+          console.log(`[webcodec] Audio via fMP4 MSE: ${audioTrack.codec} ${audioTrack.audio.sample_rate}Hz ${audioTrack.audio.channel_count}ch`);
+        } else if (audioTrack !== null && audioMode === 'raw-mse') {
+          // Raw MSE: setExtractionOptions → onSamples → SourceBuffer (audio/mpeg MIME)
+          const rawMimeMap = { 'mp4a.6b': 'audio/mpeg', 'mp4a.69': 'audio/mpeg' };
+          const rawMime = rawMimeMap[audioTrack.codec];
+          mp4box.setExtractionOptions(audioTrackId, 'audio', { nbSamples: 200 });
+          console.log(`[webcodec] Audio raw MSE: ${rawMime} (codec: ${audioTrack.codec})`);
+
+          audioSourceBuffer = audioMediaSource.addSourceBuffer(rawMime);
+          audioSourceBuffer.addEventListener('updateend', () => {
+            audioSbAppending = false;
+            drainAudioQueue();
+            maybeEndAudioStream();
+          });
+          audioSourceBuffer.addEventListener('error', (e) => {
+            console.warn('[webcodec] Audio SourceBuffer error:', e);
+            hasAudio = false;
+          });
+
+          // No init segment for raw audio streams
+          hasAudio = true;
+          audioEl.play().catch(e => console.warn('[webcodec] Audio autoplay blocked:', e.message));
+          console.log(`[webcodec] Audio via raw MSE: ${audioTrack.codec} ${audioTrack.audio.sample_rate}Hz ${audioTrack.audio.channel_count}ch`);
+        }
+
+        mp4box.start();
+
+        // Configure video decoder synchronously (no await).
+        for (const track of mediaTracks) {
+          if (track.video && !videoDecoder && track.id === videoTrackId) {
+            try {
+              const trak = mp4box.getTrackById(track.id);
+              const entry = trak.mdia.minf.stbl.stsd.entries[0];
+              const descBox = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
+
+              let description;
+              if (descBox) {
+                description = getCodecDescription(descBox);
+              }
+
+              const config = {
+                codec: track.codec,
+                codedWidth: track.video.width,
+                codedHeight: track.video.height,
+                description: description,
+              };
+
+              videoDecoder = new VideoDecoder({
+                output: bufferVideoFrame,
+                error: (e) => {
+                  console.error('[webcodec] VideoDecoder error:', e);
+                  if (!aborted) {
+                    aborted = true;
+                    rejectAbort(new Error(`Video decoder error: ${e.message}`));
+                  }
+                }
+              });
+              videoDecoder.configure(config);
+
+              console.log(`[webcodec] VideoDecoder configured: ${track.codec} ${track.video.width}x${track.video.height}`);
+            } catch (e) {
+              console.warn(`[webcodec] Failed to configure video track ${track.id}:`, e);
+              videoDecoder = null;
+            }
+          }
+        }
+
+        if (!videoDecoder) {
+          rejectAbort(new Error('No supported video codec found'));
+          return;
+        }
+
+        // Start render loop (timing is established when the first frame is displayed)
+        renderLoopRunning = true;
+        requestAnimationFrame(renderLoop);
+
+        statusEl.textContent = `Streaming: ${trackDescs}`;
+      };
+
+      // --- mp4box onSamples: queue raw video samples for rate-controlled feeding ---
+      // Audio is handled here only in raw-mse mode; fmp4-mse audio uses onSegment instead.
+      let videoSampleCount = 0;
+      mp4box.onSamples = (trackId, user, samples) => {
+        if (aborted) return;
+
+        if (user === 'audio' && audioMode === 'raw-mse') {
+          // Raw MSE: push raw MP3 frames directly to SourceBuffer
+          for (const sample of samples) {
+            if (aborted) break;
+            // sample.data is a Uint8Array; copy to a standalone ArrayBuffer for the queue
+            const buf = sample.data.buffer.slice(
+              sample.data.byteOffset,
+              sample.data.byteOffset + sample.data.byteLength
+            );
+            audioAppendQueue.push(buf);
+          }
+          drainAudioQueue();
+          return;
+        }
+
+        if (user !== 'video') return;
+
+        if (videoSampleCount === 0) {
+          console.log(`[webcodec] First video samples batch: ${samples.length} samples`);
+        }
+
+        for (const sample of samples) {
+          if (aborted) break;
+          videoSampleCount++;
+          pendingVideoSamples.push(sample);
+        }
+      };
+
+      // --- mp4box onSegment: feed audio fMP4 segments to MSE SourceBuffer ---
+      let audioSegmentCount = 0;
+      mp4box.onSegment = (trackId, user, buffer) => {
+        if (aborted) return;
+        if (user === 'audio') {
+          audioSegmentCount++;
+          if (audioSegmentCount <= 3) {
+            console.log(`[webcodec] Audio segment #${audioSegmentCount}: size=${buffer.byteLength}`);
+          }
+          audioAppendQueue.push(buffer);
+          drainAudioQueue();
+        }
+      };
+
+      mp4box.onError = (e) => {
+        console.error('[webcodec] mp4box error:', e);
+      };
+
+      // --- Controls wiring (set up before download starts so controls work during streaming) ---
+      const container = document.getElementById('video-container');
+      const controlsEl = document.getElementById('video-controls');
+      const playBtn = document.getElementById('vc-playpause');
+      const volSlider = document.getElementById('vc-volume');
+      const fsBtn = document.getElementById('vc-fullscreen');
+      const seekbarEl = document.getElementById('vc-seekbar');
+      const seekPlayedEl = document.getElementById('vc-seek-played');
+      const seekBufferedEl = document.getElementById('vc-seek-buffered');
+      const seekThumbEl = document.getElementById('vc-seek-thumb');
+
+      let hideTimeout;
+      function showControls() {
+        controlsEl.style.opacity = '1';
+        clearTimeout(hideTimeout);
+        hideTimeout = setTimeout(() => { controlsEl.style.opacity = '0'; }, 3000);
+      }
+      container.addEventListener('mousemove', showControls);
+      container.addEventListener('mouseenter', showControls);
+      showControls();
+
+      function togglePause() {
+        if (paused) {
+          // Resume: adjust wall clock so timing picks up from where we paused
+          paused = false;
+          if (wallClockSynced && !hasAudio) {
+            wallClockStart = performance.now() - ((pauseOffsetUs - videoTimeBase) / 1000);
+          }
+          if (audioEl && audioEl.paused) audioEl.play().catch(() => {});
+          playBtn.innerHTML = '&#9646;&#9646;';
+        } else {
+          // Pause: snapshot current media time
+          paused = true;
+          pauseOffsetUs = getCurrentMediaTimeUs();
+          if (audioEl && !audioEl.paused) audioEl.pause();
+          playBtn.innerHTML = '&#9654;';
+        }
+      }
+      canvasEl.addEventListener('click', togglePause);
+      playBtn.addEventListener('click', togglePause);
+      playBtn.innerHTML = '&#9646;&#9646;';
+
+      volSlider.addEventListener('input', () => {
+        if (audioEl) audioEl.volume = parseFloat(volSlider.value);
+      });
+
+      fsBtn.addEventListener('click', () => {
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+        } else {
+          container.requestFullscreen().catch(() => {});
+        }
+      });
+
+      // --- Seek bar interaction ---
+      let seekbarDragging = false;
+
+      function seekbarPctFromEvent(e) {
+        const rect = seekbarEl.getBoundingClientRect();
+        const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+        return Math.max(0, Math.min(1, x / rect.width));
+      }
+
+      function seekbarUpdateTimeDisplay(timeSec) {
+        const timeEl = document.getElementById('vc-time');
+        if (!timeEl || mediaDuration <= 0) return;
+        const m = Math.floor(timeSec / 60);
+        const s = Math.floor(timeSec % 60);
+        const pad = s < 10 ? '0' : '';
+        const dm = Math.floor(mediaDuration / 60);
+        const ds = Math.floor(mediaDuration % 60);
+        const dpad = ds < 10 ? '0' : '';
+        timeEl.textContent = `${m}:${pad}${s} / ${dm}:${dpad}${ds}`;
+      }
+
+      function seekbarClampPct(pct) {
+        if (!downloadComplete && mediaDuration > 0) {
+          const maxPct = Math.min(1, getBufferedDuration() / mediaDuration);
+          return Math.min(pct, maxPct);
+        }
+        return pct;
+      }
+
+      function seekbarStartDrag(e) {
+        if (mediaDuration <= 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        seekbarDragging = true;
+        isSeeking = true;
+        seekThumbEl.style.opacity = '1';
+
+        let pct = seekbarPctFromEvent(e);
+        pct = seekbarClampPct(pct);
+        seekPlayedEl.style.width = (pct * 100) + '%';
+        seekThumbEl.style.left = (pct * 100) + '%';
+        seekbarUpdateTimeDisplay(pct * mediaDuration);
+      }
+
+      function seekbarMoveDrag(e) {
+        if (!seekbarDragging) return;
+        e.preventDefault();
+        let pct = seekbarPctFromEvent(e);
+        pct = seekbarClampPct(pct);
+        seekPlayedEl.style.width = (pct * 100) + '%';
+        seekThumbEl.style.left = (pct * 100) + '%';
+        seekbarUpdateTimeDisplay(pct * mediaDuration);
+      }
+
+      function seekbarEndDrag(e) {
+        if (!seekbarDragging) return;
+        seekbarDragging = false;
+        isSeeking = false;
+
+        // Calculate final position from last visual state
+        const pctStr = seekPlayedEl.style.width;
+        const pct = parseFloat(pctStr) / 100;
+        seekTo(pct * mediaDuration);
+      }
+
+      seekbarEl.addEventListener('mousedown', seekbarStartDrag);
+      document.addEventListener('mousemove', seekbarMoveDrag);
+      document.addEventListener('mouseup', seekbarEndDrag);
+
+      seekbarEl.addEventListener('touchstart', seekbarStartDrag, { passive: false });
+      document.addEventListener('touchmove', seekbarMoveDrag, { passive: false });
+      document.addEventListener('touchend', seekbarEndDrag);
+
+      // Single click to seek (without drag)
+      seekbarEl.addEventListener('click', (e) => {
+        if (mediaDuration <= 0) return;
+        e.stopPropagation();
+        let pct = seekbarPctFromEvent(e);
+        pct = seekbarClampPct(pct);
+        seekTo(pct * mediaDuration);
+      });
+
+      // --- Set up hidden <audio> element with MSE for audio playback ---
+      // The browser's native audio decoder (via MSE) handles multichannel AAC, Opus, etc.
+      // that WebCodecs AudioDecoder cannot decode.
+      if (window.MediaSource) {
+        audioEl = document.createElement('audio');
+        audioEl.style.display = 'none';
+        document.body.appendChild(audioEl);
+        audioMediaSource = new MediaSource();
+        audioEl.src = URL.createObjectURL(audioMediaSource);
+
+        // Wait for sourceopen before starting download (must be ready before onReady fires)
+        await new Promise((resolve) => {
+          if (audioMediaSource.readyState === 'open') resolve();
+          else audioMediaSource.addEventListener('sourceopen', resolve, { once: true });
+        });
+        console.log('[webcodec] Audio MediaSource ready');
+      }
+
+      // --- Stream data from SDK via Web Worker ---
+      progressEl.style.display = 'block';
+      const downloadStart = performance.now();
+
+      let chunkCount = 0;
+      const worker = new Worker('./worker.js', { type: 'module' });
+
+      const streamPromise = new Promise((resolveStream, rejectStream) => {
+        worker.onmessage = (e) => {
+          const msg = e.data;
+
+          if (msg.type === 'chunk') {
+            if (aborted) return;
+            chunkCount++;
+            const buf = msg.data; // Transferred ArrayBuffer (zero-copy)
+            buf.fileStart = msg.offset;
+            if (chunkCount <= 3) {
+              console.log(`[webcodec] chunk #${chunkCount}: size=${msg.size} fileStart=${msg.offset}`);
+            }
+            byteOffset += msg.size;
+            mp4box.appendBuffer(buf);
+          } else if (msg.type === 'progress') {
+            if (aborted) return;
+            progressEl.max = msg.total;
+            progressEl.value = msg.current;
+            const pct = msg.total > 0 ? ((msg.current / msg.total) * 100).toFixed(0) : 0;
+            statusEl.textContent = `Streaming: ${msg.current}/${msg.total} slabs (${pct}%) — ${formatSize(byteOffset)} / ${formatSize(totalSize)}`;
+
+            if (byteOffset > 50 * 1024 * 1024 && !mp4boxReady) {
+              aborted = true;
+              worker.terminate();
+              rejectStream(new Error(
+                'No moov atom found after 50 MB. The file may have moov at the end. ' +
+                'Re-encode with "ffmpeg -i input.mp4 -movflags +faststart output.mp4" to fix.'
+              ));
+            }
+          } else if (msg.type === 'complete') {
+            resolveStream();
+          } else if (msg.type === 'error') {
+            rejectStream(new Error(msg.message));
+          }
+        };
+
+        worker.onerror = (e) => {
+          rejectStream(new Error(`Worker error: ${e.message}`));
+        };
+      });
+
+      // Start the download worker
+      worker.postMessage({
+        type: 'start',
+        indexerUrl: getUrl(),
+        keyHex: getKeyHex(),
+        maxPriceFetches: getMaxPriceFetches(),
+        maxDownloads: getMaxDownloads(),
+        maxUploads: getMaxUploads(),
+        objectUrl: objectUrl,
+      });
+
+      try {
+        await Promise.race([streamPromise, abortPromise]);
+      } catch (e) {
+        aborted = true;
+        worker.terminate();
+        throw e;
+      }
+      worker.terminate();
+
+      if (!aborted) {
+        downloadComplete = true;
+        mp4box.flush();
+        progressEl.value = progressEl.max;
+
+        // Wait for video decoder to finish processing queued samples
+        try {
+          if (videoDecoder && videoDecoder.state === 'configured') await videoDecoder.flush();
+        } catch (e) {
+          console.warn('[webcodec] Decoder flush error:', e);
+        }
+
+        // Signal end of audio stream to MSE
+        maybeEndAudioStream();
+
+        const elapsed = ((performance.now() - downloadStart) / 1000).toFixed(1);
+        statusEl.textContent = `Stream complete! ${formatSize(totalSize)} in ${elapsed}s.`;
+      }
+
+      return {
+        abort: () => {
+          aborted = true;
+          worker.terminate();
+          try { mp4box.flush(); } catch (e) {}
+          if (videoDecoder) try { videoDecoder.close(); } catch (e) {}
+          if (audioEl) {
+            try { audioEl.pause(); } catch (e) {}
+            try { audioEl.remove(); } catch (e) {}
+          }
+          if (audioMediaSource && audioMediaSource.readyState === 'open') {
+            try { audioMediaSource.endOfStream(); } catch (e) {}
+          }
+          while (frameBuffer.length > 0) frameBuffer.shift().close();
+          clearTimeout(hideTimeout);
+          resolveAbort();
+        }
+      };
+    }
+
+    // --- MSE streaming pipeline (legacy fallback for browsers without WebCodecs) ---
 
     async function transmuxAndStream(sdk, obj, videoEl, statusEl, progressEl) {
       if (!window.MediaSource) {
@@ -3096,7 +4221,11 @@
           }
         });
         sourceBuffer.addEventListener('error', (e) => {
-          console.error('[stream] SourceBuffer error:', e);
+          console.error('[stream] SourceBuffer error:', e, 'readyState:', mediaSource.readyState);
+          if (!aborted) {
+            aborted = true;
+            rejectAbort(new Error('SourceBuffer error — the video may use features incompatible with browser streaming'));
+          }
         });
 
         // Periodically evict old buffer data as video plays
@@ -3108,7 +4237,7 @@
 
         // Set segment options only for media tracks
         for (const track of mediaTracks) {
-          mp4box.setSegmentOptions(track.id, null, { nbSamples: 100 });
+          mp4box.setSegmentOptions(track.id, null, { nbSamples: 100, rapAlignment: true });
         }
 
         // Get single combined init segment (mp4box v2 API)
@@ -3130,7 +4259,8 @@
       let needsEviction = false;
 
       function tryEvict() {
-        if (!sourceBuffer || sourceBuffer.updating || sbAppending) return;
+        if (aborted || !sourceBuffer || sourceBuffer.updating || sbAppending) return;
+        if (mediaSource.readyState !== 'open') return;
         if (!sourceBuffer.buffered || sourceBuffer.buffered.length === 0) {
           // No buffered data yet, just retry the append
           needsEviction = false;
@@ -3156,10 +4286,13 @@
       }
 
       function drainAppendQueue() {
+        if (aborted) return;
         if (!sourceBuffer || sbAppending || appendQueue.length === 0) {
           maybeEndOfStream();
           return;
         }
+        // Guard against SourceBuffer removed from MediaSource
+        if (mediaSource.readyState !== 'open') return;
         // Proactively evict if we have a lot buffered ahead
         if (sourceBuffer.buffered && sourceBuffer.buffered.length > 0) {
           const bufferedEnd = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
@@ -3236,18 +4369,28 @@
           const pct = total > 0 ? ((current / total) * 100).toFixed(0) : 0;
           statusEl.textContent = `Streaming: ${current}/${total} slabs (${pct}%) — ${formatSize(byteOffset)} / ${formatSize(totalSize)}`;
 
-          // Detect moov-at-end or non-MP4: if first slab done and mp4box hasn't parsed moov
-          if (current >= 1 && !mp4boxReady) {
+          // Detect moov-at-end or non-MP4: if enough data delivered and mp4box still hasn't parsed moov.
+          // We check byteOffset (bytes actually fed to mp4box) rather than slab count because
+          // the progress callback can fire before all chunk data from a slab is flushed.
+          if (byteOffset > 50 * 1024 * 1024 && !mp4boxReady) {
             aborted = true;
             rejectAbort(new Error(
-              'No moov atom found in first slab. The file may have moov at the end (common with GoPro/camera recordings). ' +
+              'No moov atom found after 50 MB. The file may have moov at the end (common with GoPro/camera recordings). ' +
               'Re-encode with "ffmpeg -i input.mp4 -movflags +faststart output.mp4" to fix, or use the Download section.'
             ));
           }
         },
       );
 
-      await Promise.race([streamPromise, abortPromise]);
+      try {
+        await Promise.race([streamPromise, abortPromise]);
+      } catch (e) {
+        // Silence callbacks from the still-running WASM download before
+        // propagating the error — prevents it from clobbering the status
+        // element if the caller starts a fallback download.
+        aborted = true;
+        throw e;
+      }
 
       if (!aborted) {
         downloadComplete = true;
