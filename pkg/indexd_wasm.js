@@ -216,17 +216,17 @@ function makeMutClosure(arg0, arg1, dtor, f) {
     return real;
 }
 
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_externrefs.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
+}
+
 function passArray8ToWasm0(arg, malloc) {
     const ptr = malloc(arg.length * 1, 1) >>> 0;
     getUint8ArrayMemory0().set(arg, ptr / 1);
     WASM_VECTOR_LEN = arg.length;
     return ptr;
-}
-
-function takeFromExternrefTable0(idx) {
-    const value = wasm.__wbindgen_externrefs.get(idx);
-    wasm.__externref_table_dealloc(idx);
-    return value;
 }
 
 function _assertClass(instance, klass) {
@@ -590,6 +590,34 @@ export class PinnedObject {
         wasm.__wbg_pinnedobject_free(ptr, 0);
     }
     /**
+     * Returns the number of slabs in the object.
+     *
+     * Useful for sizing a Web Worker pool (cap workers at slab count) and
+     * for tracking completion when downloading or uploading slabs in parallel.
+     * @returns {number}
+     */
+    slabCount() {
+        const ret = wasm.pinnedobject_slabCount(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] >>> 0;
+    }
+    /**
+     * Returns the actual data length of each slab as a JS array of numbers.
+     *
+     * Useful for computing per-slab byte offsets and for accurate download
+     * progress reporting.
+     * @returns {Array<any>}
+     */
+    slabLengths() {
+        const ret = wasm.pinnedobject_slabLengths(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
      * Updates the metadata.
      * @param {Uint8Array} metadata
      */
@@ -732,6 +760,30 @@ export class SDK {
         return ret;
     }
     /**
+     * Uploads a single slab's worth of raw data with object-level encryption
+     * at the given stream offset. Returns the slab metadata as JSON.
+     *
+     * Used by parallel upload workers. Each worker calls this with a different
+     * chunk of the file and the correct stream offset. The shared data_key
+     * ensures all slabs can be decrypted together.
+     *
+     * The `on_progress` callback receives `(current_shards, total_shards)`.
+     * @param {Uint8Array} data
+     * @param {Uint8Array} data_key
+     * @param {number} stream_offset
+     * @param {Function} on_progress
+     * @param {boolean | null} [allow_host_reuse]
+     * @returns {Promise<string>}
+     */
+    uploadSlab(data, data_key, stream_offset, on_progress, allow_host_reuse) {
+        const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(data_key, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.sdk_uploadSlab(this.__wbg_ptr, ptr0, len0, ptr1, len1, stream_offset, on_progress, isLikeNone(allow_host_reuse) ? 0xFFFFFF : allow_host_reuse ? 1 : 0);
+        return ret;
+    }
+    /**
      * Lists objects from the indexer. Returns a JSON array of object events.
      * Each event has { id, deleted, updatedAt, size }.
      * Pass limit=0 or null to use the server default.
@@ -807,6 +859,36 @@ export class SDK {
         return ret;
     }
     /**
+     * Returns the slab data size in bytes (data_shards * SECTOR_SIZE).
+     * Used by JS to split files into slab-sized chunks for parallel upload.
+     * @returns {number}
+     */
+    slabDataSize() {
+        const ret = wasm.sdk_slabDataSize(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Assembles a PinnedObject from a data key and an array of slab metadata JSONs.
+     *
+     * Used after parallel upload workers have uploaded all slabs independently.
+     * The main thread collects the slab JSONs and calls this to create the
+     * final object that can be pinned to the indexer.
+     * @param {Uint8Array} data_key
+     * @param {string} slabs_json
+     * @returns {PinnedObject}
+     */
+    assembleObject(data_key, slabs_json) {
+        const ptr0 = passArray8ToWasm0(data_key, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(slabs_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.sdk_assembleObject(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return PinnedObject.__wrap(ret[0]);
+    }
+    /**
      * Starts a streaming upload that reads chunks on-demand from JavaScript.
      * This bypasses WASM memory limitations by never accumulating the entire file.
      *
@@ -849,6 +931,25 @@ export class SDK {
         return StreamingUpload.__wrap(ret[0]);
     }
     /**
+     * Generates a random 32-byte encryption key for object-level encryption.
+     * Used by parallel upload workers that share a single data key.
+     * @returns {Uint8Array}
+     */
+    generateDataKey() {
+        const ret = wasm.sdk_generateDataKey(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Configures this SDK instance as one of N parallel upload workers.
+     * The upload host queue is rotated by `workerIndex * (hostCount / numWorkers)`
+     * so workers pick different hosts and avoid overlap.
+     * @param {number} worker_index
+     * @param {number} num_workers
+     */
+    setUploadWorker(worker_index, num_workers) {
+        wasm.sdk_setUploadWorker(this.__wbg_ptr, worker_index, num_workers);
+    }
+    /**
      * Downloads an object with streaming chunks.
      * Fires `on_chunk(bytes)` after each slab is decoded and `on_progress(current, total)` for progress.
      * @param {PinnedObject} object
@@ -877,30 +978,17 @@ export class SDK {
         return ret[0];
     }
     /**
-     * Uploads a Uint8Array with per-shard progress reporting.
+     * Downloads a single slab by index, returning its decrypted data as a Uint8Array.
      *
-     * The `on_progress` callback receives `(current_shards, total_shards)`.
-     * @param {Uint8Array} data
-     * @param {Function} on_progress
-     * @returns {Promise<PinnedObject>}
-     */
-    uploadWithProgress(data, on_progress) {
-        const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.sdk_uploadWithProgress(this.__wbg_ptr, ptr0, len0, on_progress);
-        return ret;
-    }
-    /**
-     * Downloads an object's data with per-slab progress reporting.
-     *
-     * The `on_progress` callback receives `(current_slabs, total_slabs)`.
+     * Used by slab download workers to enable parallel slab downloads across
+     * multiple Web Workers, each with their own SDK instance and thread.
      * @param {PinnedObject} object
-     * @param {Function} on_progress
+     * @param {number} slab_index
      * @returns {Promise<Uint8Array>}
      */
-    downloadWithProgress(object, on_progress) {
+    downloadSlabByIndex(object, slab_index) {
         _assertClass(object, PinnedObject);
-        const ret = wasm.sdk_downloadWithProgress(this.__wbg_ptr, object.__wbg_ptr, on_progress);
+        const ret = wasm.sdk_downloadSlabByIndex(this.__wbg_ptr, object.__wbg_ptr, slab_index);
         return ret;
     }
     /**
@@ -944,16 +1032,17 @@ export class SDK {
         return ret;
     }
     /**
-     * Uploads a Uint8Array to the Sia network.
+     * Uploads a Uint8Array with per-shard progress reporting.
      *
-     * Returns a PinnedObject containing the metadata needed to download the data.
+     * The `on_progress` callback receives `(current_shards, total_shards)`.
      * @param {Uint8Array} data
+     * @param {Function} on_progress
      * @returns {Promise<PinnedObject>}
      */
-    upload(data) {
+    upload(data, on_progress) {
         const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.sdk_upload(this.__wbg_ptr, ptr0, len0);
+        const ret = wasm.sdk_upload(this.__wbg_ptr, ptr0, len0, on_progress);
         return ret;
     }
     /**
@@ -973,13 +1062,16 @@ export class SDK {
         return AppKey.__wrap(ret);
     }
     /**
-     * Downloads an object's data, returning a Uint8Array.
+     * Downloads an object's data with per-slab progress reporting.
+     *
+     * The `on_progress` callback receives `(current_slabs, total_slabs)`.
      * @param {PinnedObject} object
+     * @param {Function} on_progress
      * @returns {Promise<Uint8Array>}
      */
-    download(object) {
+    download(object, on_progress) {
         _assertClass(object, PinnedObject);
-        const ret = wasm.sdk_download(this.__wbg_ptr, object.__wbg_ptr);
+        const ret = wasm.sdk_download(this.__wbg_ptr, object.__wbg_ptr, on_progress);
         return ret;
     }
 }
@@ -1041,14 +1133,6 @@ export class StreamingUpload {
      */
     get promise() {
         const ret = wasm.streamingupload_promise(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * Returns the reader ID for this upload session (mainly for debugging)
-     * @returns {number}
-     */
-    get getReaderId() {
-        const ret = wasm.streamingupload_getReaderId(this.__wbg_ptr);
         return ret;
     }
 }
@@ -1395,6 +1479,10 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_prototypesetcall_2a6620b6922694b2 = function(arg0, arg1, arg2) {
         Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
     };
+    imports.wbg.__wbg_push_df81a39d04db858c = function(arg0, arg1) {
+        const ret = arg0.push(arg1);
+        return ret;
+    };
     imports.wbg.__wbg_queueMicrotask_34d692c25c47d05b = function(arg0) {
         const ret = arg0.queueMicrotask;
         return ret;
@@ -1545,6 +1633,11 @@ function __wbg_get_imports() {
         const ret = arg0.write(arg1);
         return ret;
     };
+    imports.wbg.__wbindgen_cast_21df047eecc8387b = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 654, function: Function { arguments: [Externref], shim_idx: 655, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
+        return ret;
+    };
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.
         const ret = getStringFromWasm0(arg0, arg1);
@@ -1555,19 +1648,14 @@ function __wbg_get_imports() {
         const ret = BigInt.asUintN(64, arg0);
         return ret;
     };
-    imports.wbg.__wbindgen_cast_8a7ac0f40a12086b = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 625, function: Function { arguments: [Externref], shim_idx: 626, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
+    imports.wbg.__wbindgen_cast_6d4333409947c1c8 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 627, function: Function { arguments: [], shim_idx: 628, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
         return ret;
     };
     imports.wbg.__wbindgen_cast_9ae0607507abb057 = function(arg0) {
         // Cast intrinsic for `I64 -> Externref`.
         const ret = arg0;
-        return ret;
-    };
-    imports.wbg.__wbindgen_cast_a5ee8c63b746891b = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 598, function: Function { arguments: [], shim_idx: 599, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
         return ret;
     };
     imports.wbg.__wbindgen_cast_cb9088102bce6b30 = function(arg0, arg1) {
