@@ -56,7 +56,7 @@ self.onmessage = async (e) => {
   }
 
   if (type === 'upload-slab') {
-    const { slabIndex, data, dataKey, streamOffset, allowHostReuse } = e.data;
+    const { slabIndex, data, dataKey, streamOffset } = e.data;
     try {
       const dataKeyBytes = new Uint8Array(dataKey);
       const slabData = new Uint8Array(data);
@@ -68,7 +68,6 @@ self.onmessage = async (e) => {
         (current, total) => {
           self.postMessage({ type: 'shard-progress', slabIndex, current, total });
         },
-        allowHostReuse || false,
       );
 
       self.postMessage({ type: 'slab-uploaded', slabIndex, slabJson });

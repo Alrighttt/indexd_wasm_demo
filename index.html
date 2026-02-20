@@ -1169,9 +1169,7 @@
       return new Promise((resolve, reject) => {
         let rejected = false;
 
-        let hostReuseEnabled = false;
-
-        function sendSlabToWorker(worker, idx, allowHostReuse) {
+        function sendSlabToWorker(worker, idx) {
           const slabOffset = idx * SLAB_DATA_SIZE;
           const slabEnd = Math.min(slabOffset + SLAB_DATA_SIZE, fileSize);
           const blob = file.slice(slabOffset, slabEnd);
@@ -1182,7 +1180,6 @@
               data: buf,
               dataKey: dataKeyBuf,
               streamOffset: slabOffset,
-              allowHostReuse,
             }, [buf]);
           });
         }
@@ -1190,7 +1187,7 @@
         function assignWork(worker) {
           if (nextSlab >= slabCount || rejected) return;
           const idx = nextSlab++;
-          sendSlabToWorker(worker, idx, hostReuseEnabled);
+          sendSlabToWorker(worker, idx);
         }
 
         for (const w of workers) {
@@ -1230,30 +1227,9 @@
             }
 
             if (e.data.type === 'slab-error') {
-              const failedIdx = e.data.slabIndex;
-              const failedMsg = e.data.message;
-
-              if (!hostReuseEnabled && failedMsg.includes('failed to upload shard')) {
-                // Pause all workers, ask user
-                const userAccepted = confirm(
-                  `Slab ${failedIdx} failed: not enough unique reachable hosts.\n\n` +
-                  `Would you like to retry by reusing hosts? This will allow the ` +
-                  `upload to succeed, but it will reduce redundancy by placing ` +
-                  `multiple shards on the same host.`
-                );
-
-                if (userAccepted) {
-                  hostReuseEnabled = true;
-                  status.textContent = `Retrying slab ${failedIdx} with host reuse...`;
-                  sendSlabToWorker(w, failedIdx, true);
-                  return;
-                }
-              }
-
-              // User declined or different error — abort
               rejected = true;
               workers.forEach(w => w.terminate());
-              reject(new Error(`Slab ${failedIdx}: ${failedMsg}`));
+              reject(new Error(`Slab ${e.data.slabIndex}: ${e.data.message}`));
             }
           };
           // Assign initial work
