@@ -299,12 +299,12 @@ export function generateRecoveryPhrase() {
     }
 }
 
-function wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1) {
-    wasm.wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1);
-}
-
 function wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2) {
     wasm.wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2);
+}
+
+function wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1) {
+    wasm.wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1);
 }
 
 function wasm_bindgen__convert__closures_____invoke__h0015dda4019b602e(arg0, arg1, arg2, arg3) {
@@ -917,16 +917,6 @@ export class SDK {
     generateDataKey() {
         const ret = wasm.sdk_generateDataKey(this.__wbg_ptr);
         return ret;
-    }
-    /**
-     * Configures this SDK instance as one of N parallel upload workers.
-     * The upload host queue is rotated by `workerIndex * (hostCount / numWorkers)`
-     * so workers pick different hosts and avoid overlap.
-     * @param {number} worker_index
-     * @param {number} num_workers
-     */
-    setUploadWorker(worker_index, num_workers) {
-        wasm.sdk_setUploadWorker(this.__wbg_ptr, worker_index, num_workers);
     }
     /**
      * Downloads an object with streaming chunks.
@@ -1630,19 +1620,14 @@ function __wbg_get_imports() {
         const ret = BigInt.asUintN(64, arg0);
         return ret;
     };
-    imports.wbg.__wbindgen_cast_7ef6a0ff71c5bd38 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 630, function: Function { arguments: [], shim_idx: 631, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
+    imports.wbg.__wbindgen_cast_80d6b89900bfa419 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 653, function: Function { arguments: [Externref], shim_idx: 654, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
         return ret;
     };
     imports.wbg.__wbindgen_cast_9ae0607507abb057 = function(arg0) {
         // Cast intrinsic for `I64 -> Externref`.
         const ret = arg0;
-        return ret;
-    };
-    imports.wbg.__wbindgen_cast_c9f82725a3a9e292 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 657, function: Function { arguments: [Externref], shim_idx: 658, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
         return ret;
     };
     imports.wbg.__wbindgen_cast_cb9088102bce6b30 = function(arg0, arg1) {
@@ -1653,6 +1638,11 @@ function __wbg_get_imports() {
     imports.wbg.__wbindgen_cast_d6cd19b81560fd6e = function(arg0) {
         // Cast intrinsic for `F64 -> Externref`.
         const ret = arg0;
+        return ret;
+    };
+    imports.wbg.__wbindgen_cast_f4a121dbb76238b7 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 626, function: Function { arguments: [], shim_idx: 627, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
         return ret;
     };
     imports.wbg.__wbindgen_init_externref_table = function() {
