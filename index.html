@@ -761,6 +761,8 @@
       validateRecoveryPhrase,
       AppKey,
       Builder,
+      UploadOptions,
+      DownloadOptions,
       setLogLevel,
     } from './pkg/indexd_wasm.js';
 
@@ -827,7 +829,9 @@
       const PROGRESS_THROTTLE_MS = 100;
 
       const blobParts = [];
-      await sdk.downloadStreaming(obj, getMaxDownloads(),
+      const dlOpts = new DownloadOptions();
+      dlOpts.maxInflight = getMaxDownloads();
+      await sdk.downloadStreaming(obj, dlOpts,
         (chunk) => { blobParts.push(chunk); },
         (current, total) => {
           const now = performance.now();
@@ -1741,7 +1745,9 @@
 
         const uploadStart = performance.now();
         const CHUNK_SIZE = 128 * 1024 * 1024;
-        const upload = sdk.streamingUpload(data.length, getMaxUploads(), (current, total) => {
+        const ulOpts = new UploadOptions();
+        ulOpts.maxInflight = getMaxUploads();
+        const upload = sdk.streamingUpload(data.length, ulOpts, (current, total) => {
           progress.max = total;
           progress.value = current;
           status.textContent = `Uploading... ${current}/${total} shards`;
@@ -1890,7 +1896,9 @@
         const uploadStart = performance.now();
         const CHUNK_SIZE = 128 * 1024 * 1024;
         const fileSize = selectedFile.size;
-        const upload = sdk.streamingUpload(fileSize, getMaxUploads(), (current, total) => {
+        const ulOpts2 = new UploadOptions();
+        ulOpts2.maxInflight = getMaxUploads();
+        const upload = sdk.streamingUpload(fileSize, ulOpts2, (current, total) => {
           progress.max = total;
           progress.value = current;
           status.innerHTML = `Uploading ${selectedFile.name} (${formatSize(fileSize)})... ${current}/${total} shards`;
@@ -4367,7 +4375,9 @@
       const downloadStart = performance.now();
 
       let chunkCount = 0;
-      const streamPromise = sdk.downloadStreaming(obj, getMaxDownloads(),
+      const dlOpts2 = new DownloadOptions();
+      dlOpts2.maxInflight = getMaxDownloads();
+      const streamPromise = sdk.downloadStreaming(obj, dlOpts2,
         (chunk) => {
           if (aborted) return;
           chunkCount++;

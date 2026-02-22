@@ -2,7 +2,7 @@
 // Each worker creates its own SDK instance and downloads individual slabs
 // on demand. A pool of these workers enables true parallel slab downloads.
 
-import init, { AppKey, Builder, setLogLevel } from './pkg/indexd_wasm.js';
+import init, { AppKey, Builder, DownloadOptions, setLogLevel } from './pkg/indexd_wasm.js';
 
 function fromHex(h) {
   const bytes = new Uint8Array(h.length / 2);
@@ -57,7 +57,9 @@ self.onmessage = async (e) => {
   if (type === 'download-slab') {
     const { slabIndex } = e.data;
     try {
-      const data = await sdk.downloadSlabByIndex(obj, slabIndex, maxDownloads);
+      const opts = new DownloadOptions();
+      opts.maxInflight = maxDownloads;
+      const data = await sdk.downloadSlabByIndex(obj, slabIndex, opts);
       const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
       self.postMessage(
         { type: 'slab-data', slabIndex, data: buf },

@@ -235,29 +235,20 @@ function _assertClass(instance, klass) {
     }
 }
 /**
- * Connects to a host via WebTransport and fetches its settings/prices.
- *
- * `address` should be a host address like `host.example.com:9883`.
- * Returns the host settings as a JS object.
- * @param {string} address
- * @returns {Promise<any>}
+ * Generates a new 12-word BIP-32 recovery phrase.
+ * @returns {string}
  */
-export function fetchHostSettings(address) {
-    const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.fetchHostSettings(ptr0, len0);
-    return ret;
-}
-
-/**
- * Sets the log level filter. Accepts "debug", "info", "warn", or "error".
- * Allows JavaScript to control the verbosity of Rust logs at runtime.
- * @param {string} level
- */
-export function setLogLevel(level) {
-    const ptr0 = passStringToWasm0(level, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    wasm.setLogLevel(ptr0, len0);
+export function generateRecoveryPhrase() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.generateRecoveryPhrase();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
 }
 
 /**
@@ -274,29 +265,38 @@ export function validateRecoveryPhrase(phrase) {
 }
 
 /**
+ * Sets the log level filter. Accepts "debug", "info", "warn", or "error".
+ * Allows JavaScript to control the verbosity of Rust logs at runtime.
+ * @param {string} level
+ */
+export function setLogLevel(level) {
+    const ptr0 = passStringToWasm0(level, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    wasm.setLogLevel(ptr0, len0);
+}
+
+/**
+ * Connects to a host via WebTransport and fetches its settings/prices.
+ *
+ * `address` should be a host address like `host.example.com:9883`.
+ * Returns the host settings as a JS object.
+ * @param {string} address
+ * @returns {Promise<any>}
+ */
+export function fetchHostSettings(address) {
+    const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.fetchHostSettings(ptr0, len0);
+    return ret;
+}
+
+/**
  * Install a panic hook and logging bridge so that Rust panics show a proper
  * stack trace and `log::debug!()` / `log::info!()` etc. appear in the browser
  * console.
  */
 export function init_panic_hook() {
     wasm.init_panic_hook();
-}
-
-/**
- * Generates a new 12-word BIP-32 recovery phrase.
- * @returns {string}
- */
-export function generateRecoveryPhrase() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-        const ret = wasm.generateRecoveryPhrase();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-    }
 }
 
 function wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2) {
@@ -542,6 +542,62 @@ export class Builder {
 }
 if (Symbol.dispose) Builder.prototype[Symbol.dispose] = Builder.prototype.free;
 
+const DownloadOptionsFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_downloadoptions_free(ptr >>> 0, 1));
+/**
+ * Download configuration exposed to JavaScript.
+ */
+export class DownloadOptions {
+
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(DownloadOptions.prototype);
+        obj.__wbg_ptr = ptr;
+        DownloadOptionsFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        DownloadOptionsFinalization.unregister(this);
+        return ptr;
+    }
+
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_downloadoptions_free(ptr, 0);
+    }
+    /**
+     * @returns {number}
+     */
+    get maxInflight() {
+        const ret = wasm.downloadoptions_maxInflight(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @param {number} val
+     */
+    set maxInflight(val) {
+        wasm.downloadoptions_set_maxInflight(this.__wbg_ptr, val);
+    }
+    constructor() {
+        const ret = wasm.downloadoptions_new();
+        this.__wbg_ptr = ret >>> 0;
+        DownloadOptionsFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @returns {DownloadOptions}
+     */
+    clone() {
+        const ret = wasm.downloadoptions_clone(this.__wbg_ptr);
+        return DownloadOptions.__wrap(ret);
+    }
+}
+if (Symbol.dispose) DownloadOptions.prototype[Symbol.dispose] = DownloadOptions.prototype.free;
+
 const PinnedObjectFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_pinnedobject_free(ptr >>> 0, 1));
@@ -749,16 +805,18 @@ export class SDK {
      * @param {Uint8Array} data
      * @param {Uint8Array} data_key
      * @param {number} stream_offset
-     * @param {number} max_inflight
+     * @param {UploadOptions} options
      * @param {Function} on_progress
      * @returns {Promise<string>}
      */
-    uploadSlab(data, data_key, stream_offset, max_inflight, on_progress) {
+    uploadSlab(data, data_key, stream_offset, options, on_progress) {
         const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passArray8ToWasm0(data_key, wasm.__wbindgen_malloc);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.sdk_uploadSlab(this.__wbg_ptr, ptr0, len0, ptr1, len1, stream_offset, max_inflight, on_progress);
+        _assertClass(options, UploadOptions);
+        var ptr2 = options.__destroy_into_raw();
+        const ret = wasm.sdk_uploadSlab(this.__wbg_ptr, ptr0, len0, ptr1, len1, stream_offset, ptr2, on_progress);
         return ret;
     }
     /**
@@ -837,8 +895,8 @@ export class SDK {
         return ret;
     }
     /**
-     * Returns the slab data size in bytes (data_shards * SECTOR_SIZE).
-     * Used by JS to split files into slab-sized chunks for parallel upload.
+     * Returns the slab data size for default options (data_shards * SECTOR_SIZE).
+     * Prefer `UploadOptions.slabDataSize()` for custom shard counts.
      * @returns {number}
      */
     slabDataSize() {
@@ -898,12 +956,14 @@ export class SDK {
      * const obj = await upload.promise;
      * ```
      * @param {number} total_size
-     * @param {number} max_inflight
+     * @param {UploadOptions} options
      * @param {Function} on_progress
      * @returns {StreamingUpload}
      */
-    streamingUpload(total_size, max_inflight, on_progress) {
-        const ret = wasm.sdk_streamingUpload(this.__wbg_ptr, total_size, max_inflight, on_progress);
+    streamingUpload(total_size, options, on_progress) {
+        _assertClass(options, UploadOptions);
+        var ptr0 = options.__destroy_into_raw();
+        const ret = wasm.sdk_streamingUpload(this.__wbg_ptr, total_size, ptr0, on_progress);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -922,14 +982,16 @@ export class SDK {
      * Downloads an object with streaming chunks.
      * Fires `on_chunk(bytes)` after each slab is decoded and `on_progress(current, total)` for progress.
      * @param {PinnedObject} object
-     * @param {number} max_inflight
+     * @param {DownloadOptions} options
      * @param {Function} on_chunk
      * @param {Function} on_progress
      * @returns {Promise<void>}
      */
-    downloadStreaming(object, max_inflight, on_chunk, on_progress) {
+    downloadStreaming(object, options, on_chunk, on_progress) {
         _assertClass(object, PinnedObject);
-        const ret = wasm.sdk_downloadStreaming(this.__wbg_ptr, object.__wbg_ptr, max_inflight, on_chunk, on_progress);
+        _assertClass(options, DownloadOptions);
+        var ptr0 = options.__destroy_into_raw();
+        const ret = wasm.sdk_downloadStreaming(this.__wbg_ptr, object.__wbg_ptr, ptr0, on_chunk, on_progress);
         return ret;
     }
     /**
@@ -954,12 +1016,14 @@ export class SDK {
      * multiple Web Workers, each with their own SDK instance and thread.
      * @param {PinnedObject} object
      * @param {number} slab_index
-     * @param {number} max_inflight
+     * @param {DownloadOptions} options
      * @returns {Promise<Uint8Array>}
      */
-    downloadSlabByIndex(object, slab_index, max_inflight) {
+    downloadSlabByIndex(object, slab_index, options) {
         _assertClass(object, PinnedObject);
-        const ret = wasm.sdk_downloadSlabByIndex(this.__wbg_ptr, object.__wbg_ptr, slab_index, max_inflight);
+        _assertClass(options, DownloadOptions);
+        var ptr0 = options.__destroy_into_raw();
+        const ret = wasm.sdk_downloadSlabByIndex(this.__wbg_ptr, object.__wbg_ptr, slab_index, ptr0);
         return ret;
     }
     /**
@@ -976,12 +1040,14 @@ export class SDK {
      * Finalizes a chunked upload and returns the PinnedObject.
      * on_progress callback receives (current_shards, total_shards).
      * @param {number} session_id
-     * @param {number} max_inflight
+     * @param {UploadOptions} options
      * @param {Function} on_progress
      * @returns {Promise<PinnedObject>}
      */
-    finalizeChunkedUpload(session_id, max_inflight, on_progress) {
-        const ret = wasm.sdk_finalizeChunkedUpload(this.__wbg_ptr, session_id, max_inflight, on_progress);
+    finalizeChunkedUpload(session_id, options, on_progress) {
+        _assertClass(options, UploadOptions);
+        var ptr0 = options.__destroy_into_raw();
+        const ret = wasm.sdk_finalizeChunkedUpload(this.__wbg_ptr, session_id, ptr0, on_progress);
         return ret;
     }
     /**
@@ -1008,14 +1074,16 @@ export class SDK {
      *
      * The `on_progress` callback receives `(current_shards, total_shards)`.
      * @param {Uint8Array} data
-     * @param {number} max_inflight
+     * @param {UploadOptions} options
      * @param {Function} on_progress
      * @returns {Promise<PinnedObject>}
      */
-    upload(data, max_inflight, on_progress) {
+    upload(data, options, on_progress) {
         const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.sdk_upload(this.__wbg_ptr, ptr0, len0, max_inflight, on_progress);
+        _assertClass(options, UploadOptions);
+        var ptr1 = options.__destroy_into_raw();
+        const ret = wasm.sdk_upload(this.__wbg_ptr, ptr0, len0, ptr1, on_progress);
         return ret;
     }
     /**
@@ -1039,13 +1107,15 @@ export class SDK {
      *
      * The `on_progress` callback receives `(current_slabs, total_slabs)`.
      * @param {PinnedObject} object
-     * @param {number} max_inflight
+     * @param {DownloadOptions} options
      * @param {Function} on_progress
      * @returns {Promise<Uint8Array>}
      */
-    download(object, max_inflight, on_progress) {
+    download(object, options, on_progress) {
         _assertClass(object, PinnedObject);
-        const ret = wasm.sdk_download(this.__wbg_ptr, object.__wbg_ptr, max_inflight, on_progress);
+        _assertClass(options, DownloadOptions);
+        var ptr0 = options.__destroy_into_raw();
+        const ret = wasm.sdk_download(this.__wbg_ptr, object.__wbg_ptr, ptr0, on_progress);
         return ret;
     }
 }
@@ -1111,6 +1181,103 @@ export class StreamingUpload {
     }
 }
 if (Symbol.dispose) StreamingUpload.prototype[Symbol.dispose] = StreamingUpload.prototype.free;
+
+const UploadOptionsFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_uploadoptions_free(ptr >>> 0, 1));
+/**
+ * Upload configuration exposed to JavaScript.
+ */
+export class UploadOptions {
+
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(UploadOptions.prototype);
+        obj.__wbg_ptr = ptr;
+        UploadOptionsFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        UploadOptionsFinalization.unregister(this);
+        return ptr;
+    }
+
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_uploadoptions_free(ptr, 0);
+    }
+    /**
+     * @returns {number}
+     */
+    get dataShards() {
+        const ret = wasm.uploadoptions_dataShards(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get maxInflight() {
+        const ret = wasm.downloadoptions_maxInflight(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    get parityShards() {
+        const ret = wasm.uploadoptions_parityShards(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Size in bytes of data per slab (data_shards * SECTOR_SIZE).
+     * @returns {number}
+     */
+    slabDataSize() {
+        const ret = wasm.uploadoptions_slabDataSize(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} val
+     */
+    set dataShards(val) {
+        wasm.uploadoptions_set_dataShards(this.__wbg_ptr, val);
+    }
+    /**
+     * @param {number} val
+     */
+    set maxInflight(val) {
+        wasm.downloadoptions_set_maxInflight(this.__wbg_ptr, val);
+    }
+    /**
+     * @param {number} val
+     */
+    set parityShards(val) {
+        wasm.uploadoptions_set_parityShards(this.__wbg_ptr, val);
+    }
+    /**
+     * @returns {number}
+     */
+    get totalShardsPerSlab() {
+        const ret = wasm.uploadoptions_totalShardsPerSlab(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    constructor() {
+        const ret = wasm.uploadoptions_new();
+        this.__wbg_ptr = ret >>> 0;
+        UploadOptionsFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @returns {UploadOptions}
+     */
+    clone() {
+        const ret = wasm.uploadoptions_clone(this.__wbg_ptr);
+        return UploadOptions.__wrap(ret);
+    }
+}
+if (Symbol.dispose) UploadOptions.prototype[Symbol.dispose] = UploadOptions.prototype.free;
 
 const EXPECTED_RESPONSE_TYPES = new Set(['basic', 'cors', 'default']);
 
@@ -1610,19 +1777,24 @@ function __wbg_get_imports() {
         const ret = arg0.write(arg1);
         return ret;
     };
+    imports.wbg.__wbindgen_cast_106a7888bbae35f1 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 652, function: Function { arguments: [Externref], shim_idx: 653, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
+        return ret;
+    };
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.
         const ret = getStringFromWasm0(arg0, arg1);
         return ret;
     };
+    imports.wbg.__wbindgen_cast_3f095b8139316065 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 625, function: Function { arguments: [], shim_idx: 626, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
+        return ret;
+    };
     imports.wbg.__wbindgen_cast_4625c577ab2ec9ee = function(arg0) {
         // Cast intrinsic for `U64 -> Externref`.
         const ret = BigInt.asUintN(64, arg0);
-        return ret;
-    };
-    imports.wbg.__wbindgen_cast_80d6b89900bfa419 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 653, function: Function { arguments: [Externref], shim_idx: 654, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
         return ret;
     };
     imports.wbg.__wbindgen_cast_9ae0607507abb057 = function(arg0) {
@@ -1638,11 +1810,6 @@ function __wbg_get_imports() {
     imports.wbg.__wbindgen_cast_d6cd19b81560fd6e = function(arg0) {
         // Cast intrinsic for `F64 -> Externref`.
         const ret = arg0;
-        return ret;
-    };
-    imports.wbg.__wbindgen_cast_f4a121dbb76238b7 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 626, function: Function { arguments: [], shim_idx: 627, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
         return ret;
     };
     imports.wbg.__wbindgen_init_externref_table = function() {

@@ -2,7 +2,7 @@
 // Each worker creates its own SDK instance and uploads individual slabs
 // on demand. A pool of these workers enables true parallel slab uploads.
 
-import init, { AppKey, Builder, setLogLevel } from './pkg/indexd_wasm.js';
+import init, { AppKey, Builder, UploadOptions, setLogLevel } from './pkg/indexd_wasm.js';
 
 function fromHex(h) {
   const bytes = new Uint8Array(h.length / 2);
@@ -57,11 +57,13 @@ self.onmessage = async (e) => {
       const dataKeyBytes = new Uint8Array(dataKey);
       const slabData = new Uint8Array(data);
 
+      const opts = new UploadOptions();
+      opts.maxInflight = maxUploads;
       const slabJson = await sdk.uploadSlab(
         slabData,
         dataKeyBytes,
         streamOffset,
-        maxUploads,
+        opts,
         (current, total) => {
           self.postMessage({ type: 'shard-progress', slabIndex, current, total });
         },

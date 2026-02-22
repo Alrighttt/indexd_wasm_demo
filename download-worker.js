@@ -2,7 +2,7 @@
 // Creates independent SDK instance, downloads via downloadStreaming,
 // posts decrypted chunks back via Transferable ArrayBuffers (zero-copy).
 
-import init, { AppKey, Builder } from './pkg/indexd_wasm.js';
+import init, { AppKey, Builder, DownloadOptions } from './pkg/indexd_wasm.js';
 
 function fromHex(h) {
   const bytes = new Uint8Array(h.length / 2);
@@ -44,9 +44,11 @@ self.onmessage = async (e) => {
 
     // Stream download — post chunks back to main thread
     let byteOffset = 0;
+    const opts = new DownloadOptions();
+    opts.maxInflight = maxDownloads;
     await sdk.downloadStreaming(
       obj,
-      maxDownloads,
+      opts,
       (chunk) => {
         const buf = chunk.buffer.slice(
           chunk.byteOffset,
