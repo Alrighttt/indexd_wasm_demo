@@ -598,7 +598,8 @@
       <div class="label">Text to upload</div>
       <textarea id="ul-text" rows="4" placeholder="Type or paste text here..."></textarea>
       <div class="row" style="margin-top:0.5rem">
-        <button id="btn-upload">Upload</button>
+        <button id="btn-upload-text-workers">Upload ( web workers )</button>
+        <button id="btn-upload">Upload ( single-threaded )</button>
       </div>
       <progress id="ul-progress" max="100" value="0" style="display:none"></progress>
       <div class="output" id="ul-status"></div>
@@ -1057,56 +1058,6 @@
       const fileSize = file.size;
       const SLAB_DATA_SIZE = sdk.slabDataSize(); // 10 * 4 MiB = 41,943,040
       const slabCount = fileSize === 0 ? 0 : Math.ceil(fileSize / SLAB_DATA_SIZE);
-
-      // For tiny files, fall back to single-threaded upload
-      if (slabCount <= 2) {
-        status.textContent = 'Small file — using single-threaded upload...';
-        const slab_data_size = 10 * 4_194_304;
-        const num_slabs = fileSize === 0 ? 0 : Math.ceil(fileSize / slab_data_size);
-        const total_shards = num_slabs * 30;
-
-        // Use chunked or streaming depending on size
-        const STREAMING_THRESHOLD = 1.5 * 1024 * 1024 * 1024;
-        const CHUNK_SIZE = 128 * 1024 * 1024;
-        const totalChunks = Math.ceil(fileSize / CHUNK_SIZE);
-        const uploadStart = performance.now();
-        let obj;
-
-        if (fileSize > STREAMING_THRESHOLD) {
-          const upload = sdk.streamingUpload(fileSize, (current, total) => {
-            progress.max = total;
-            progress.value = current;
-            status.textContent = `Uploading ${file.name}... ${current}/${total} shards`;
-          });
-          (async () => {
-            for (let i = 0; i < totalChunks; i++) {
-              const start = i * CHUNK_SIZE;
-              const end = Math.min(start + CHUNK_SIZE, fileSize);
-              const chunk = file.slice(start, end);
-              const data = new Uint8Array(await chunk.arrayBuffer());
-              await upload.pushChunk(data);
-            }
-            await upload.pushChunk(null);
-          })();
-          obj = await upload.promise;
-        } else {
-          const sessionId = sdk.startChunkedUpload(fileSize);
-          for (let i = 0; i < totalChunks; i++) {
-            const start = i * CHUNK_SIZE;
-            const end = Math.min(start + CHUNK_SIZE, fileSize);
-            const chunk = file.slice(start, end);
-            const data = new Uint8Array(await chunk.arrayBuffer());
-            sdk.uploadChunk(sessionId, data);
-          }
-          obj = await sdk.finalizeChunkedUpload(sessionId, (current, total) => {
-            progress.max = total;
-            progress.value = current;
-            status.textContent = `Uploading ${file.name}... ${current}/${total} shards`;
-          });
-        }
-        const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
-        return { obj, elapsed, size: fileSize };
-      }
 
       // 2. Generate shared data key on main thread
       const dataKey = sdk.generateDataKey(); // Uint8Array(32)
@@ -1792,6 +1743,44 @@
         await sdk.pinObject(obj);
 
         status.innerHTML += `\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
+      } catch (e) {
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    // -- Upload Text (web workers) --
+    document.getElementById('btn-upload-text-workers').addEventListener('click', async () => {
+      const status = document.getElementById('ul-status');
+      const progress = document.getElementById('ul-progress');
+      const text = document.getElementById('ul-text').value;
+
+      if (!text) {
+        status.innerHTML = '<span class="fail">Enter some text to upload</span>';
+        return;
+      }
+
+      progress.style.display = 'none';
+      progress.value = 0;
+
+      try {
+        const data = new TextEncoder().encode(text);
+        const file = new File([data], 'text-upload.dat');
+
+        status.innerHTML = `Uploading text (${formatSize(data.length)})...\n`;
+
+        const result = await parallelUpload(file, status, progress);
+        if (!result) return;
+
+        const { obj, elapsed, size } = result;
+        const objectId = obj.id();
+
+        progress.value = progress.max;
+        status.innerHTML = `Upload complete (${formatSize(size)}) in ${elapsed}s. Pinning to indexer...`;
+
+        const sdk = await connectSdk(status);
+        await sdk.pinObject(obj);
+
+        status.innerHTML = `Upload + pin completed (${formatSize(size)}) in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
