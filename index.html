@@ -1287,7 +1287,6 @@
       // Return cached SDK if config hasn't changed
       const currentConfig = `${url}|${keyHex}`;
       if (cachedSdk && cachedConfig === currentConfig) {
-        statusEl.innerHTML = '<span class="pass">Using cached connection</span>';
         return cachedSdk;
       }
 
