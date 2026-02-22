@@ -428,19 +428,19 @@
         <div
           style="display:grid; grid-template-columns: 2fr 1fr; gap:0.5rem; align-items:center; margin-bottom:0.5rem;">
           <label style="font-size:0.85rem; color:#999;">Max Price Fetches:</label>
-          <input id="cfg-max-price-fetches" type="number" min="1" max="10" value="10"
+          <input id="cfg-max-price-fetches" type="number" min="1" value="10"
             style="padding:0.4rem; text-align:center;" />
           <label style="font-size:0.85rem; color:#999;">Max Downloads:</label>
-          <input id="cfg-max-downloads" type="number" min="1" max="20" value="20"
+          <input id="cfg-max-downloads" type="number" min="1" value="20"
             style="padding:0.4rem; text-align:center;" />
           <label style="font-size:0.85rem; color:#999;">Max Uploads:</label>
-          <input id="cfg-max-uploads" type="number" min="1" max="20" value="16"
+          <input id="cfg-max-uploads" type="number" min="1" value="16"
             style="padding:0.4rem; text-align:center;" />
           <label style="font-size:0.85rem; color:#999;">Download Workers:</label>
-          <input id="cfg-download-workers" type="number" min="1" max="16" value="4"
+          <input id="cfg-download-workers" type="number" min="1" value="4"
             style="padding:0.4rem; text-align:center;" />
           <label style="font-size:0.85rem; color:#999;">Upload Workers:</label>
-          <input id="cfg-upload-workers" type="number" min="1" max="16" value="4"
+          <input id="cfg-upload-workers" type="number" min="1" value="4"
             style="padding:0.4rem; text-align:center;" />
         </div>
         <div style="font-size:0.75rem; color:#999; margin-bottom:0.75rem; line-height:1.4;">
@@ -613,11 +613,13 @@
         <div class="file-info" id="uf-file-info"></div>
       </div>
       <div class="row" style="margin-top:0.5rem">
-        <button id="btn-upload-file">Upload</button>
+        <button id="btn-upload-file">Upload ( web workers )</button>
+        <button id="btn-upload-file-simple">Upload ( single-threaded )</button>
       </div>
       <progress id="uf-progress" max="100" value="0" style="display:none"></progress>
       <div class="output" id="uf-status"></div>
     </section>
+
 
     <!-- Download File -->
     <section>
@@ -841,18 +843,12 @@
       // 2. Spawn worker pool
       const actualWorkers = Math.min(numWorkers, slabCount);
 
-      // Divide maxDownloads budget across workers to stay under Chrome's
-      // 64 pending WebTransport session limit.
-      const BROWSER_WT_LIMIT = 48; // leave headroom under Chrome's 64
-      const totalMaxDownloads = Math.min(getMaxDownloads(), BROWSER_WT_LIMIT);
-      const perWorkerMaxDownloads = Math.max(2, Math.floor(totalMaxDownloads / actualWorkers));
-
       const config = {
         type: 'init',
         indexerUrl: getUrl(),
         keyHex: getKeyHex(),
         maxPriceFetches: getMaxPriceFetches(),
-        maxDownloads: perWorkerMaxDownloads,
+        maxDownloads: getMaxDownloads(),
         maxUploads: getMaxUploads(),
         objectUrl,
       };
@@ -943,16 +939,12 @@
 
       const actualWorkers = Math.min(numWorkers, slabCount);
 
-      const BROWSER_WT_LIMIT = 48;
-      const totalMaxDownloads = Math.min(getMaxDownloads(), BROWSER_WT_LIMIT);
-      const perWorkerMaxDownloads = Math.max(2, Math.floor(totalMaxDownloads / actualWorkers));
-
       const config = {
         type: 'init',
         indexerUrl: getUrl(),
         keyHex: getKeyHex(),
         maxPriceFetches: getMaxPriceFetches(),
-        maxDownloads: perWorkerMaxDownloads,
+        maxDownloads: getMaxDownloads(),
         maxUploads: getMaxUploads(),
         objectUrl,
       };
@@ -1124,18 +1116,12 @@
       // 3. Spawn worker pool
       const actualWorkers = Math.min(numWorkers, slabCount);
 
-      // Divide maxUploads budget across workers to stay under Chrome's
-      // 64 pending WebTransport session limit.
-      const BROWSER_WT_LIMIT = 48;
-      const totalMaxUploads = Math.min(getMaxUploads(), BROWSER_WT_LIMIT);
-      const perWorkerMaxUploads = Math.max(2, Math.floor(totalMaxUploads / actualWorkers));
-
       const config = {
         type: 'init',
         indexerUrl: getUrl(),
         keyHex: getKeyHex(),
         maxPriceFetches: getMaxPriceFetches(),
-        maxUploads: perWorkerMaxUploads,
+        maxUploads: getMaxUploads(),
       };
 
       status.textContent = `Connecting ${actualWorkers} upload workers...`;
@@ -1195,7 +1181,6 @@
             if (rejected) return;
 
             if (e.data.type === 'shard-progress') {
-              // Track per-slab progress so retries don't double-count
               slabShards[e.data.slabIndex] = e.data.current;
               const shardsDone = slabShards.reduce((a, b) => a + b, 0);
               progress.max = totalShards;
@@ -1232,7 +1217,6 @@
               reject(new Error(`Slab ${e.data.slabIndex}: ${e.data.message}`));
             }
           };
-          // Assign initial work
           assignWork(w);
         }
       });
@@ -1869,6 +1853,53 @@
         await sdk.pinObject(obj);
 
         status.innerHTML = `File: ${selectedFile.name}\nSize: ${formatSize(size)}\nUpload + pin completed in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
+      } catch (e) {
+        status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
+      }
+    });
+
+    // -- Simple File Upload (no workers, single-threaded sdk.upload()) --
+    document.getElementById('btn-upload-file-simple').addEventListener('click', async () => {
+      const status = document.getElementById('uf-status');
+      const progress = document.getElementById('uf-progress');
+
+      if (!selectedFile) {
+        status.innerHTML = '<span class="fail">Select a file first</span>';
+        return;
+      }
+
+      progress.style.display = 'none';
+      progress.value = 0;
+
+      try {
+        status.innerHTML = `Simple upload: ${selectedFile.name} (${formatSize(selectedFile.size)})...\nReading file into memory...`;
+
+        const arrayBuf = await selectedFile.arrayBuffer();
+        const data = new Uint8Array(arrayBuf);
+
+        status.innerHTML += `\nFile read. Connecting...`;
+        const sdk = await connectSdk(status);
+        if (!sdk) return;
+
+        progress.style.display = 'block';
+        status.innerHTML += `\nUploading (single-threaded, no workers)...`;
+
+        const uploadStart = performance.now();
+        const obj = await sdk.upload(data, (current, total) => {
+          progress.max = total;
+          progress.value = current;
+          status.innerHTML = `Simple upload: ${selectedFile.name} (${formatSize(selectedFile.size)})\nUploading... ${current}/${total} shards`;
+        });
+        const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
+        const objectId = obj.id();
+        const size = obj.size();
+
+        progress.value = progress.max;
+        status.innerHTML = `Upload complete (${formatSize(size)}) in ${elapsed}s. Pinning to indexer...`;
+
+        await sdk.pinObject(obj);
+
+        status.innerHTML = `File: ${selectedFile.name}\nSize: ${formatSize(size)}\nSimple upload + pin completed in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
