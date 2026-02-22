@@ -424,7 +424,7 @@
             🚀 Fast<br><span style="font-size:0.7rem; opacity:0.9;">May Be Unstable</span>
           </button>
         </div>
-        <div class="label" style="margin-top:0.5rem;">Concurrency Limits</div>
+        <div class="label" style="margin-top:0.5rem;">Performance</div>
         <div
           style="display:grid; grid-template-columns: 2fr 1fr; gap:0.5rem; align-items:center; margin-bottom:0.5rem;">
           <label style="font-size:0.85rem; color:#999;">Max Downloads:</label>
@@ -443,8 +443,7 @@
           <input id="cfg-debug-logging" type="checkbox" style="cursor:pointer; justify-self:center;" />
         </div>
         <div style="font-size:0.75rem; color:#999; margin-bottom:0.75rem; line-height:1.4;">
-          💡 Lower = more stable, higher = faster. Changes require reconnecting SDK.<br/>
-          Workers: parallel threads for slab downloads/uploads (each gets its own SDK instance).
+          Max Downloads/Uploads controls concurrent sector transfers per worker. Workers control parallel slab downloads/uploads (each gets its own SDK instance).
         </div>
       </div>
       <hr />
@@ -797,7 +796,7 @@
       const PROGRESS_THROTTLE_MS = 100;
 
       const blobParts = [];
-      await sdk.downloadStreaming(obj,
+      await sdk.downloadStreaming(obj, getMaxDownloads(),
         (chunk) => { blobParts.push(chunk); },
         (current, total) => {
           const now = performance.now();
@@ -845,9 +844,7 @@
         type: 'init',
         indexerUrl: getUrl(),
         keyHex: getKeyHex(),
-        maxPriceFetches: getMaxPriceFetches(),
         maxDownloads: getMaxDownloads(),
-        maxUploads: getMaxUploads(),
         objectUrl,
         logLevel: getLogLevel(),
       };
@@ -942,9 +939,7 @@
         type: 'init',
         indexerUrl: getUrl(),
         keyHex: getKeyHex(),
-        maxPriceFetches: getMaxPriceFetches(),
         maxDownloads: getMaxDownloads(),
-        maxUploads: getMaxUploads(),
         objectUrl,
         logLevel: getLogLevel(),
       };
@@ -1070,7 +1065,6 @@
         type: 'init',
         indexerUrl: getUrl(),
         keyHex: getKeyHex(),
-        maxPriceFetches: getMaxPriceFetches(),
         maxUploads: getMaxUploads(),
         logLevel: getLogLevel(),
       };
@@ -1222,11 +1216,9 @@
     });
     maxDownloadsInput.addEventListener('input', () => {
       localStorage.setItem('max-downloads', maxDownloadsInput.value);
-      cachedSdk = null; // Invalidate SDK cache when concurrency settings change
     });
     maxUploadsInput.addEventListener('input', () => {
       localStorage.setItem('max-uploads', maxUploadsInput.value);
-      cachedSdk = null; // Invalidate SDK cache when concurrency settings change
     });
     downloadWorkersInput.addEventListener('input', () => {
       localStorage.setItem('download-workers', downloadWorkersInput.value);
@@ -1243,7 +1235,6 @@
     // helpers to read shared config
     function getUrl() { return document.getElementById('cfg-url').value.trim(); }
     function getKeyHex() { return document.getElementById('cfg-key').value.trim(); }
-    function getMaxPriceFetches() { return 10; }
     function getMaxDownloads() { return parseInt(document.getElementById('cfg-max-downloads').value) || 8; }
     function getMaxUploads() { return parseInt(document.getElementById('cfg-max-uploads').value) || 8; }
     function getDownloadWorkers() { return parseInt(document.getElementById('cfg-download-workers').value) || 8; }
@@ -1262,10 +1253,8 @@
         return null;
       }
 
-      // Return cached SDK if config hasn't changed (include concurrency settings in cache key)
-      const maxDownloads = getMaxDownloads();
-      const maxUploads = getMaxUploads();
-      const currentConfig = `${url}|${keyHex}|${maxDownloads}|${maxUploads}`;
+      // Return cached SDK if config hasn't changed
+      const currentConfig = `${url}|${keyHex}`;
       if (cachedSdk && cachedConfig === currentConfig) {
         statusEl.innerHTML = '<span class="pass">Using cached connection</span>';
         return cachedSdk;
@@ -1276,12 +1265,6 @@
       const appKey = new AppKey(seed);
       statusEl.textContent = `App key created. Public key: ${appKey.publicKey()}\nConnecting to indexer...`;
       const builder = new Builder(url);
-
-      // Configure concurrency limits
-      builder.withMaxPriceFetches(getMaxPriceFetches());
-      builder.withMaxDownloads(maxDownloads);
-      builder.withMaxUploads(maxUploads);
-
       const sdk = await builder.connected(appKey);
       if (!sdk) {
         statusEl.innerHTML = '<span class="fail">App key not recognized by this indexer. Register first.</span>';
@@ -1302,16 +1285,15 @@
     document.getElementById('app').style.display = 'block';
 
     // -- Performance Presets --
-    function setPreset(downloads, uploads, dlWorkers, ulWorkers) {
-      document.getElementById('cfg-max-downloads').value = downloads;
-      document.getElementById('cfg-max-uploads').value = uploads;
+    function setPreset(maxDl, maxUl, dlWorkers, ulWorkers) {
+      document.getElementById('cfg-max-downloads').value = maxDl;
+      document.getElementById('cfg-max-uploads').value = maxUl;
       document.getElementById('cfg-download-workers').value = dlWorkers;
       document.getElementById('cfg-upload-workers').value = ulWorkers;
-      localStorage.setItem('max-downloads', downloads);
-      localStorage.setItem('max-uploads', uploads);
+      localStorage.setItem('max-downloads', maxDl);
+      localStorage.setItem('max-uploads', maxUl);
       localStorage.setItem('download-workers', dlWorkers);
       localStorage.setItem('upload-workers', ulWorkers);
-      cachedSdk = null; // Invalidate SDK cache
     }
 
     document.getElementById('preset-conservative').addEventListener('click', () => setPreset(4, 4, 4, 4));
@@ -1729,7 +1711,7 @@
 
         const uploadStart = performance.now();
         const CHUNK_SIZE = 128 * 1024 * 1024;
-        const upload = sdk.streamingUpload(data.length, (current, total) => {
+        const upload = sdk.streamingUpload(data.length, getMaxUploads(), (current, total) => {
           progress.max = total;
           progress.value = current;
           status.textContent = `Uploading... ${current}/${total} shards`;
@@ -1878,7 +1860,7 @@
         const uploadStart = performance.now();
         const CHUNK_SIZE = 128 * 1024 * 1024;
         const fileSize = selectedFile.size;
-        const upload = sdk.streamingUpload(fileSize, (current, total) => {
+        const upload = sdk.streamingUpload(fileSize, getMaxUploads(), (current, total) => {
           progress.max = total;
           progress.value = current;
           status.innerHTML = `Uploading ${selectedFile.name} (${formatSize(fileSize)})... ${current}/${total} shards`;
@@ -4083,9 +4065,7 @@
         type: 'start',
         indexerUrl: getUrl(),
         keyHex: getKeyHex(),
-        maxPriceFetches: getMaxPriceFetches(),
         maxDownloads: getMaxDownloads(),
-        maxUploads: getMaxUploads(),
         objectUrl: objectUrl,
         logLevel: getLogLevel(),
       });
@@ -4357,7 +4337,7 @@
       const downloadStart = performance.now();
 
       let chunkCount = 0;
-      const streamPromise = sdk.downloadStreaming(obj,
+      const streamPromise = sdk.downloadStreaming(obj, getMaxDownloads(),
         (chunk) => {
           if (aborted) return;
           chunkCount++;

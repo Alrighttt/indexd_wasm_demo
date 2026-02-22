@@ -14,6 +14,7 @@ function fromHex(h) {
 
 let sdk = null;
 let obj = null;
+let maxDownloads = 8;
 
 self.onmessage = async (e) => {
   const { type } = e.data;
@@ -22,23 +23,19 @@ self.onmessage = async (e) => {
     const {
       indexerUrl,
       keyHex,
-      maxPriceFetches,
-      maxDownloads,
-      maxUploads,
+      maxDownloads: maxDownloadsInit,
       objectUrl,
       logLevel,
     } = e.data;
 
     try {
+      maxDownloads = maxDownloadsInit || maxDownloads;
       await init();
       if (logLevel) setLogLevel(logLevel);
 
       const seed = fromHex(keyHex);
       const appKey = new AppKey(seed);
       const builder = new Builder(indexerUrl);
-      builder.withMaxPriceFetches(maxPriceFetches);
-      builder.withMaxDownloads(maxDownloads);
-      builder.withMaxUploads(maxUploads);
 
       sdk = await builder.connected(appKey);
       if (!sdk) {
@@ -60,7 +57,7 @@ self.onmessage = async (e) => {
   if (type === 'download-slab') {
     const { slabIndex } = e.data;
     try {
-      const data = await sdk.downloadSlabByIndex(obj, slabIndex);
+      const data = await sdk.downloadSlabByIndex(obj, slabIndex, maxDownloads);
       const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
       self.postMessage(
         { type: 'slab-data', slabIndex, data: buf },

@@ -13,6 +13,7 @@ function fromHex(h) {
 }
 
 let sdk = null;
+let maxUploads = 8;
 
 self.onmessage = async (e) => {
   const { type } = e.data;
@@ -21,25 +22,21 @@ self.onmessage = async (e) => {
     const {
       indexerUrl,
       keyHex,
-      maxPriceFetches,
-      maxUploads,
+      maxUploads: maxUploadsInit,
       workerIndex,
       numWorkers,
       logLevel,
     } = e.data;
 
     try {
-      console.log(`[upload-worker ${workerIndex}] init: maxUploads=${maxUploads}, maxPriceFetches=${maxPriceFetches}, numWorkers=${numWorkers}`);
+      maxUploads = maxUploadsInit || maxUploads;
+      console.log(`[upload-worker ${workerIndex}] init: numWorkers=${numWorkers}`);
       await init();
       if (logLevel) setLogLevel(logLevel);
 
       const seed = fromHex(keyHex);
       const appKey = new AppKey(seed);
       const builder = new Builder(indexerUrl);
-      builder.withMaxPriceFetches(maxPriceFetches);
-      builder.withMaxUploads(maxUploads);
-      // Downloads not needed for upload workers
-      builder.withMaxDownloads(1);
 
       sdk = await builder.connected(appKey);
       if (!sdk) {
@@ -68,6 +65,7 @@ self.onmessage = async (e) => {
         slabData,
         dataKeyBytes,
         streamOffset,
+        maxUploads,
         (current, total) => {
           self.postMessage({ type: 'shard-progress', slabIndex, current, total });
         },

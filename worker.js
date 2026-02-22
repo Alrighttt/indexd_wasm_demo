@@ -19,9 +19,7 @@ self.onmessage = async (e) => {
     const {
       indexerUrl,
       keyHex,
-      maxPriceFetches,
       maxDownloads,
-      maxUploads,
       objectUrl,
       logLevel,
     } = e.data;
@@ -35,9 +33,6 @@ self.onmessage = async (e) => {
       const seed = fromHex(keyHex);
       const appKey = new AppKey(seed);
       const builder = new Builder(indexerUrl);
-      builder.withMaxPriceFetches(maxPriceFetches);
-      builder.withMaxDownloads(maxDownloads);
-      builder.withMaxUploads(maxUploads);
 
       const sdk = await builder.connected(appKey);
       if (!sdk) {
@@ -54,6 +49,7 @@ self.onmessage = async (e) => {
       let byteOffset = 0;
       await sdk.downloadStreaming(
         obj,
+        maxDownloads,
         (chunk) => {
           const buf = chunk.buffer.slice(
             chunk.byteOffset,

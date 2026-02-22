@@ -452,17 +452,6 @@ export class Builder {
         }
     }
     /**
-     * Sets the maximum number of concurrent uploads (default: 3).
-     * Lower values = more stable, higher values = faster but may crash browser.
-     * @param {number} max
-     */
-    withMaxUploads(max) {
-        const ret = wasm.builder_withMaxUploads(this.__wbg_ptr, max);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
-    }
-    /**
      * Polls for approval. Resolves when the user approves.
      * @returns {Promise<void>}
      */
@@ -490,28 +479,6 @@ export class Builder {
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.builder_requestConnection(this.__wbg_ptr, ptr0, len0);
         return ret;
-    }
-    /**
-     * Sets the maximum number of concurrent downloads (default: 2).
-     * Lower values = more stable, higher values = faster but may crash browser.
-     * @param {number} max
-     */
-    withMaxDownloads(max) {
-        const ret = wasm.builder_withMaxDownloads(this.__wbg_ptr, max);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
-    }
-    /**
-     * Sets the maximum number of concurrent price fetches (default: 1).
-     * Lower values = more stable, higher values = faster but may crash browser.
-     * @param {number} max
-     */
-    withMaxPriceFetches(max) {
-        const ret = wasm.builder_withMaxPriceFetches(this.__wbg_ptr, max);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
     }
     /**
      * Transitions the builder using a pre-fetched connection response.
@@ -782,15 +749,16 @@ export class SDK {
      * @param {Uint8Array} data
      * @param {Uint8Array} data_key
      * @param {number} stream_offset
+     * @param {number} max_inflight
      * @param {Function} on_progress
      * @returns {Promise<string>}
      */
-    uploadSlab(data, data_key, stream_offset, on_progress) {
+    uploadSlab(data, data_key, stream_offset, max_inflight, on_progress) {
         const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passArray8ToWasm0(data_key, wasm.__wbindgen_malloc);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.sdk_uploadSlab(this.__wbg_ptr, ptr0, len0, ptr1, len1, stream_offset, on_progress);
+        const ret = wasm.sdk_uploadSlab(this.__wbg_ptr, ptr0, len0, ptr1, len1, stream_offset, max_inflight, on_progress);
         return ret;
     }
     /**
@@ -930,11 +898,12 @@ export class SDK {
      * const obj = await upload.promise;
      * ```
      * @param {number} total_size
+     * @param {number} max_inflight
      * @param {Function} on_progress
      * @returns {StreamingUpload}
      */
-    streamingUpload(total_size, on_progress) {
-        const ret = wasm.sdk_streamingUpload(this.__wbg_ptr, total_size, on_progress);
+    streamingUpload(total_size, max_inflight, on_progress) {
+        const ret = wasm.sdk_streamingUpload(this.__wbg_ptr, total_size, max_inflight, on_progress);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -963,13 +932,14 @@ export class SDK {
      * Downloads an object with streaming chunks.
      * Fires `on_chunk(bytes)` after each slab is decoded and `on_progress(current, total)` for progress.
      * @param {PinnedObject} object
+     * @param {number} max_inflight
      * @param {Function} on_chunk
      * @param {Function} on_progress
      * @returns {Promise<void>}
      */
-    downloadStreaming(object, on_chunk, on_progress) {
+    downloadStreaming(object, max_inflight, on_chunk, on_progress) {
         _assertClass(object, PinnedObject);
-        const ret = wasm.sdk_downloadStreaming(this.__wbg_ptr, object.__wbg_ptr, on_chunk, on_progress);
+        const ret = wasm.sdk_downloadStreaming(this.__wbg_ptr, object.__wbg_ptr, max_inflight, on_chunk, on_progress);
         return ret;
     }
     /**
@@ -994,11 +964,12 @@ export class SDK {
      * multiple Web Workers, each with their own SDK instance and thread.
      * @param {PinnedObject} object
      * @param {number} slab_index
+     * @param {number} max_inflight
      * @returns {Promise<Uint8Array>}
      */
-    downloadSlabByIndex(object, slab_index) {
+    downloadSlabByIndex(object, slab_index, max_inflight) {
         _assertClass(object, PinnedObject);
-        const ret = wasm.sdk_downloadSlabByIndex(this.__wbg_ptr, object.__wbg_ptr, slab_index);
+        const ret = wasm.sdk_downloadSlabByIndex(this.__wbg_ptr, object.__wbg_ptr, slab_index, max_inflight);
         return ret;
     }
     /**
@@ -1015,11 +986,12 @@ export class SDK {
      * Finalizes a chunked upload and returns the PinnedObject.
      * on_progress callback receives (current_shards, total_shards).
      * @param {number} session_id
+     * @param {number} max_inflight
      * @param {Function} on_progress
      * @returns {Promise<PinnedObject>}
      */
-    finalizeChunkedUpload(session_id, on_progress) {
-        const ret = wasm.sdk_finalizeChunkedUpload(this.__wbg_ptr, session_id, on_progress);
+    finalizeChunkedUpload(session_id, max_inflight, on_progress) {
+        const ret = wasm.sdk_finalizeChunkedUpload(this.__wbg_ptr, session_id, max_inflight, on_progress);
         return ret;
     }
     /**
@@ -1046,13 +1018,14 @@ export class SDK {
      *
      * The `on_progress` callback receives `(current_shards, total_shards)`.
      * @param {Uint8Array} data
+     * @param {number} max_inflight
      * @param {Function} on_progress
      * @returns {Promise<PinnedObject>}
      */
-    upload(data, on_progress) {
+    upload(data, max_inflight, on_progress) {
         const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.sdk_upload(this.__wbg_ptr, ptr0, len0, on_progress);
+        const ret = wasm.sdk_upload(this.__wbg_ptr, ptr0, len0, max_inflight, on_progress);
         return ret;
     }
     /**
@@ -1076,12 +1049,13 @@ export class SDK {
      *
      * The `on_progress` callback receives `(current_slabs, total_slabs)`.
      * @param {PinnedObject} object
+     * @param {number} max_inflight
      * @param {Function} on_progress
      * @returns {Promise<Uint8Array>}
      */
-    download(object, on_progress) {
+    download(object, max_inflight, on_progress) {
         _assertClass(object, PinnedObject);
-        const ret = wasm.sdk_download(this.__wbg_ptr, object.__wbg_ptr, on_progress);
+        const ret = wasm.sdk_download(this.__wbg_ptr, object.__wbg_ptr, max_inflight, on_progress);
         return ret;
     }
 }
@@ -1646,11 +1620,6 @@ function __wbg_get_imports() {
         const ret = arg0.write(arg1);
         return ret;
     };
-    imports.wbg.__wbindgen_cast_20ce164e56cd231a = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 631, function: Function { arguments: [], shim_idx: 632, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
-        return ret;
-    };
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.
         const ret = getStringFromWasm0(arg0, arg1);
@@ -1661,14 +1630,19 @@ function __wbg_get_imports() {
         const ret = BigInt.asUintN(64, arg0);
         return ret;
     };
-    imports.wbg.__wbindgen_cast_8ccd339667e731f6 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 658, function: Function { arguments: [Externref], shim_idx: 659, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
+    imports.wbg.__wbindgen_cast_7ef6a0ff71c5bd38 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 630, function: Function { arguments: [], shim_idx: 631, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
         return ret;
     };
     imports.wbg.__wbindgen_cast_9ae0607507abb057 = function(arg0) {
         // Cast intrinsic for `I64 -> Externref`.
         const ret = arg0;
+        return ret;
+    };
+    imports.wbg.__wbindgen_cast_c9f82725a3a9e292 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 657, function: Function { arguments: [Externref], shim_idx: 658, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
         return ret;
     };
     imports.wbg.__wbindgen_cast_cb9088102bce6b30 = function(arg0, arg1) {
