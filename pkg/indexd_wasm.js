@@ -235,6 +235,34 @@ function _assertClass(instance, klass) {
     }
 }
 /**
+ * Connects to a host via WebTransport and fetches its settings/prices.
+ *
+ * `address` should be a host address like `host.example.com:9883`.
+ * Returns the host settings as a JS object.
+ * @param {string} address
+ * @returns {Promise<any>}
+ */
+export function fetchHostSettings(address) {
+    const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.fetchHostSettings(ptr0, len0);
+    return ret;
+}
+
+/**
+ * Validates a BIP-32 recovery phrase.
+ * @param {string} phrase
+ */
+export function validateRecoveryPhrase(phrase) {
+    const ptr0 = passStringToWasm0(phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.validateRecoveryPhrase(ptr0, len0);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
  * Generates a new 12-word BIP-32 recovery phrase.
  * @returns {string}
  */
@@ -252,19 +280,6 @@ export function generateRecoveryPhrase() {
 }
 
 /**
- * Validates a BIP-32 recovery phrase.
- * @param {string} phrase
- */
-export function validateRecoveryPhrase(phrase) {
-    const ptr0 = passStringToWasm0(phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.validateRecoveryPhrase(ptr0, len0);
-    if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
-    }
-}
-
-/**
  * Sets the log level filter. Accepts "debug", "info", "warn", or "error".
  * Allows JavaScript to control the verbosity of Rust logs at runtime.
  * @param {string} level
@@ -276,21 +291,6 @@ export function setLogLevel(level) {
 }
 
 /**
- * Connects to a host via WebTransport and fetches its settings/prices.
- *
- * `address` should be a host address like `host.example.com:9883`.
- * Returns the host settings as a JS object.
- * @param {string} address
- * @returns {Promise<any>}
- */
-export function fetchHostSettings(address) {
-    const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.fetchHostSettings(ptr0, len0);
-    return ret;
-}
-
-/**
  * Install a panic hook and logging bridge so that Rust panics show a proper
  * stack trace and `log::debug!()` / `log::info!()` etc. appear in the browser
  * console.
@@ -299,12 +299,12 @@ export function init_panic_hook() {
     wasm.init_panic_hook();
 }
 
-function wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2) {
-    wasm.wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2);
-}
-
 function wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1) {
     wasm.wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1);
+}
+
+function wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2) {
+    wasm.wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2);
 }
 
 function wasm_bindgen__convert__closures_____invoke__h0015dda4019b602e(arg0, arg1, arg2, arg3) {
@@ -569,19 +569,6 @@ export class DownloadOptions {
         const ptr = this.__destroy_into_raw();
         wasm.__wbg_downloadoptions_free(ptr, 0);
     }
-    /**
-     * @returns {number}
-     */
-    get maxInflight() {
-        const ret = wasm.downloadoptions_maxInflight(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * @param {number} val
-     */
-    set maxInflight(val) {
-        wasm.downloadoptions_set_maxInflight(this.__wbg_ptr, val);
-    }
     constructor() {
         const ret = wasm.downloadoptions_new();
         this.__wbg_ptr = ret >>> 0;
@@ -594,6 +581,19 @@ export class DownloadOptions {
     clone() {
         const ret = wasm.downloadoptions_clone(this.__wbg_ptr);
         return DownloadOptions.__wrap(ret);
+    }
+    /**
+     * @returns {number}
+     */
+    get maxInflight() {
+        const ret = wasm.__wbg_get_downloadoptions_maxInflight(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set maxInflight(arg0) {
+        wasm.__wbg_set_downloadoptions_maxInflight(this.__wbg_ptr, arg0);
     }
 }
 if (Symbol.dispose) DownloadOptions.prototype[Symbol.dispose] = DownloadOptions.prototype.free;
@@ -1210,51 +1210,12 @@ export class UploadOptions {
         wasm.__wbg_uploadoptions_free(ptr, 0);
     }
     /**
-     * @returns {number}
-     */
-    get dataShards() {
-        const ret = wasm.uploadoptions_dataShards(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * @returns {number}
-     */
-    get maxInflight() {
-        const ret = wasm.downloadoptions_maxInflight(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * @returns {number}
-     */
-    get parityShards() {
-        const ret = wasm.uploadoptions_parityShards(this.__wbg_ptr);
-        return ret;
-    }
-    /**
      * Size in bytes of data per slab (data_shards * SECTOR_SIZE).
      * @returns {number}
      */
     slabDataSize() {
         const ret = wasm.uploadoptions_slabDataSize(this.__wbg_ptr);
         return ret;
-    }
-    /**
-     * @param {number} val
-     */
-    set dataShards(val) {
-        wasm.uploadoptions_set_dataShards(this.__wbg_ptr, val);
-    }
-    /**
-     * @param {number} val
-     */
-    set maxInflight(val) {
-        wasm.downloadoptions_set_maxInflight(this.__wbg_ptr, val);
-    }
-    /**
-     * @param {number} val
-     */
-    set parityShards(val) {
-        wasm.uploadoptions_set_parityShards(this.__wbg_ptr, val);
     }
     /**
      * @returns {number}
@@ -1275,6 +1236,45 @@ export class UploadOptions {
     clone() {
         const ret = wasm.uploadoptions_clone(this.__wbg_ptr);
         return UploadOptions.__wrap(ret);
+    }
+    /**
+     * @returns {number}
+     */
+    get dataShards() {
+        const ret = wasm.__wbg_get_uploadoptions_dataShards(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set dataShards(arg0) {
+        wasm.__wbg_set_uploadoptions_dataShards(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @returns {number}
+     */
+    get parityShards() {
+        const ret = wasm.__wbg_get_uploadoptions_parityShards(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set parityShards(arg0) {
+        wasm.__wbg_set_uploadoptions_parityShards(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @returns {number}
+     */
+    get maxInflight() {
+        const ret = wasm.__wbg_get_downloadoptions_maxInflight(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set maxInflight(arg0) {
+        wasm.__wbg_set_downloadoptions_maxInflight(this.__wbg_ptr, arg0);
     }
 }
 if (Symbol.dispose) UploadOptions.prototype[Symbol.dispose] = UploadOptions.prototype.free;
@@ -1396,20 +1396,12 @@ function __wbg_get_imports() {
         const ret = arg0.call(arg1);
         return ret;
     }, arguments) };
-    imports.wbg.__wbg_catch_943836faa5d29bfb = function(arg0, arg1) {
-        const ret = arg0.catch(arg1);
-        return ret;
-    };
     imports.wbg.__wbg_clearTimeout_42d9ccd50822fd3a = function(arg0) {
         const ret = clearTimeout(arg0);
         return ret;
     };
     imports.wbg.__wbg_close_802fb4e36c4945ce = function(arg0) {
         arg0.close();
-    };
-    imports.wbg.__wbg_closed_6f894f2f23536b65 = function(arg0) {
-        const ret = arg0.closed;
-        return ret;
     };
     imports.wbg.__wbg_createBidirectionalStream_b78a5e42d918e4d2 = function(arg0) {
         const ret = arg0.createBidirectionalStream();
@@ -1495,16 +1487,6 @@ function __wbg_get_imports() {
         let result;
         try {
             result = arg0 instanceof Response;
-        } catch (_) {
-            result = false;
-        }
-        const ret = result;
-        return ret;
-    };
-    imports.wbg.__wbg_instanceof_Window_4846dbb3de56c84c = function(arg0) {
-        let result;
-        try {
-            result = arg0 instanceof Window;
         } catch (_) {
             result = false;
         }
@@ -1665,10 +1647,6 @@ function __wbg_get_imports() {
         const ret = setTimeout(arg0, arg1);
         return ret;
     };
-    imports.wbg.__wbg_setTimeout_780ac15e3df4c663 = function() { return handleError(function (arg0, arg1, arg2) {
-        const ret = arg0.setTimeout(arg1, arg2);
-        return ret;
-    }, arguments) };
     imports.wbg.__wbg_set_3f1d0b984ed272ed = function(arg0, arg1, arg2) {
         arg0[arg1] = arg2;
     };
@@ -1777,24 +1755,24 @@ function __wbg_get_imports() {
         const ret = arg0.write(arg1);
         return ret;
     };
-    imports.wbg.__wbindgen_cast_106a7888bbae35f1 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 652, function: Function { arguments: [Externref], shim_idx: 653, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
-        return ret;
-    };
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.
         const ret = getStringFromWasm0(arg0, arg1);
         return ret;
     };
-    imports.wbg.__wbindgen_cast_3f095b8139316065 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 625, function: Function { arguments: [], shim_idx: 626, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
-        return ret;
-    };
     imports.wbg.__wbindgen_cast_4625c577ab2ec9ee = function(arg0) {
         // Cast intrinsic for `U64 -> Externref`.
         const ret = BigInt.asUintN(64, arg0);
+        return ret;
+    };
+    imports.wbg.__wbindgen_cast_4fe050ba73f625b3 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 650, function: Function { arguments: [Externref], shim_idx: 651, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hfe1550f2fd145211, wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3);
+        return ret;
+    };
+    imports.wbg.__wbindgen_cast_6d800d785f61bfcb = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 623, function: Function { arguments: [], shim_idx: 624, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h0378c0ade826c8cf, wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9);
         return ret;
     };
     imports.wbg.__wbindgen_cast_9ae0607507abb057 = function(arg0) {

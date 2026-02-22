@@ -1974,9 +1974,12 @@
         progress.style.display = 'block';
         status.textContent = 'Downloading...';
 
-        const downloadStart = performance.now();
+        let downloadStart;
         let bytesDownloaded = 0;
         let progressInterval = null;
+
+        // Sliding window for speed calculation (last 3 seconds)
+        const speedSamples = []; // { time: ms, bytes: total }
 
         // Update progress display (reads from progress element + bytesDownloaded)
         const updateProgress = () => {
@@ -1987,7 +1990,20 @@
           const now = performance.now();
           const percentage = ((currentSlab / totalSlabs) * 100).toFixed(1);
           const elapsed = (now - downloadStart) / 1000;
-          const speed = bytesDownloaded / elapsed;
+
+          // Track samples and compute speed over a sliding window
+          speedSamples.push({ time: now, bytes: bytesDownloaded });
+          const windowMs = 3000;
+          while (speedSamples.length > 1 && now - speedSamples[0].time > windowMs) {
+            speedSamples.shift();
+          }
+          let speed = 0;
+          if (speedSamples.length >= 2) {
+            const oldest = speedSamples[0];
+            const dt = (now - oldest.time) / 1000;
+            if (dt > 0) speed = (bytesDownloaded - oldest.bytes) / dt;
+          }
+
           const remaining = size - bytesDownloaded;
           const eta = speed > 0 ? remaining / speed : 0;
 
@@ -2005,14 +2021,15 @@
           status.textContent = `${line1}\n${line2}`;
         };
 
-        progressInterval = setInterval(updateProgress, 100);
-
         // Parallel slab download to disk via File System Access API
         if (window.showSaveFilePicker) {
           const handle = await window.showSaveFilePicker({
             suggestedName: filename,
           });
           const writable = await handle.createWritable();
+          // Start timer after file picker closes (not while user is choosing a location)
+          downloadStart = performance.now();
+          progressInterval = setInterval(updateProgress, 100);
           try {
             await parallelDownloadToDisk(input, writable, status, progress,
               (bytes) => { bytesDownloaded = bytes; });
@@ -2022,7 +2039,9 @@
             throw e;
           }
         } else {
-          // Memory fallback (no File System Access API)
+          // Memory fallback (no File System Access API — no file picker delay)
+          downloadStart = performance.now();
+          progressInterval = setInterval(updateProgress, 100);
           const result = await parallelDownload(input, status, progress, 'Downloading');
           bytesDownloaded = result.size;
           const blob = result.blob;
