@@ -28,6 +28,7 @@ self.onmessage = async (e) => {
     } = e.data;
 
     try {
+      console.log(`[upload-worker ${workerIndex}] init: maxUploads=${maxUploads}, maxPriceFetches=${maxPriceFetches}, numWorkers=${numWorkers}`);
       await init();
 
       const seed = fromHex(keyHex);
