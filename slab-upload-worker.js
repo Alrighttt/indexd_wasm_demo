@@ -44,10 +44,6 @@ self.onmessage = async (e) => {
         return;
       }
 
-      // Tell the SDK which worker this is so it can evenly space
-      // host selection across all workers based on actual host count.
-      sdk.setUploadWorker(workerIndex, numWorkers);
-
       self.postMessage({ type: 'ready' });
     } catch (err) {
       self.postMessage({ type: 'error', message: err.message || String(err) });
