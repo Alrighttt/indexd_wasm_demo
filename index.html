@@ -122,6 +122,40 @@
       display: none;
     }
 
+    .info-tip {
+      position: relative;
+      cursor: help;
+      color: #666;
+      font-size: 0.75rem;
+    }
+
+    .info-tip:hover {
+      color: #999;
+    }
+
+    .info-tip .info-tip-text {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a1a1a;
+      color: #e0e0e0;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      padding: 0.5rem 0.65rem;
+      border-radius: 4px;
+      border: 1px solid #444;
+      width: 220px;
+      white-space: normal;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .info-tip:hover .info-tip-text {
+      display: block;
+    }
+
     .dropzone {
       border: 2px dashed #333;
       border-radius: 8px;
@@ -427,23 +461,20 @@
         <div class="label" style="margin-top:0.5rem;">Performance</div>
         <div
           style="display:grid; grid-template-columns: 2fr 1fr; gap:0.5rem; align-items:center; margin-bottom:0.5rem;">
-          <label style="font-size:0.85rem; color:#999;">Max Downloads:</label>
+          <label style="font-size:0.85rem; color:#999;">Max Downloads: <span class="info-tip">&#9432;<span class="info-tip-text">Maximum concurrent sector downloads per worker. Higher values increase throughput but use more connections.</span></span></label>
           <input id="cfg-max-downloads" type="number" min="1" value="8"
             style="padding:0.4rem; text-align:center;" />
-          <label style="font-size:0.85rem; color:#999;">Max Uploads:</label>
+          <label style="font-size:0.85rem; color:#999;">Max Uploads: <span class="info-tip">&#9432;<span class="info-tip-text">Maximum concurrent sector uploads per worker. Higher values increase throughput but use more connections.</span></span></label>
           <input id="cfg-max-uploads" type="number" min="1" value="8"
             style="padding:0.4rem; text-align:center;" />
-          <label style="font-size:0.85rem; color:#999;">Download Workers:</label>
+          <label style="font-size:0.85rem; color:#999;">Download Workers: <span class="info-tip">&#9432;<span class="info-tip-text">Number of Web Workers for parallel slab downloads. More workers allow multiple slabs to download simultaneously, improving speed for large files.</span></span></label>
           <input id="cfg-download-workers" type="number" min="1" value="8"
             style="padding:0.4rem; text-align:center;" />
-          <label style="font-size:0.85rem; color:#999;">Upload Workers:</label>
+          <label style="font-size:0.85rem; color:#999;">Upload Workers: <span class="info-tip">&#9432;<span class="info-tip-text">Number of Web Workers for parallel slab uploads. More workers allow multiple slabs to upload simultaneously, improving speed for large files.</span></span></label>
           <input id="cfg-upload-workers" type="number" min="1" value="8"
             style="padding:0.4rem; text-align:center;" />
-          <label for="cfg-debug-logging" style="font-size:0.85rem; color:#999; cursor:pointer;">Debug Logging:</label>
+          <label for="cfg-debug-logging" style="font-size:0.85rem; color:#999; cursor:pointer;">Debug Logging: <span class="info-tip">&#9432;<span class="info-tip-text">Enables verbose debug logging from the SDK. Output is written to the browser console (open DevTools to view).</span></span></label>
           <input id="cfg-debug-logging" type="checkbox" style="cursor:pointer; justify-self:center;" />
-        </div>
-        <div style="font-size:0.75rem; color:#999; margin-bottom:0.75rem; line-height:1.4;">
-          Max Downloads/Uploads controls concurrent sector transfers per worker. Workers control parallel slab downloads/uploads (each gets its own SDK instance).
         </div>
       </div>
       <hr />
