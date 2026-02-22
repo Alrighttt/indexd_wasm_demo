@@ -2,7 +2,7 @@
 // Runs shard decryption, RS reconstruction, and object-level decryption
 // off the main thread, posting decrypted chunks back via Transferable ArrayBuffers.
 
-import init, { AppKey, Builder } from './pkg/indexd_wasm.js';
+import init, { AppKey, Builder, setLogLevel } from './pkg/indexd_wasm.js';
 
 function fromHex(h) {
   const bytes = new Uint8Array(h.length / 2);
@@ -23,11 +23,13 @@ self.onmessage = async (e) => {
       maxDownloads,
       maxUploads,
       objectUrl,
+      logLevel,
     } = e.data;
 
     try {
       // Initialize WASM module
       await init();
+      if (logLevel) setLogLevel(logLevel);
 
       // Build SDK
       const seed = fromHex(keyHex);

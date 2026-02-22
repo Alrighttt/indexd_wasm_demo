@@ -2,7 +2,7 @@
 // Each worker creates its own SDK instance and downloads individual slabs
 // on demand. A pool of these workers enables true parallel slab downloads.
 
-import init, { AppKey, Builder } from './pkg/indexd_wasm.js';
+import init, { AppKey, Builder, setLogLevel } from './pkg/indexd_wasm.js';
 
 function fromHex(h) {
   const bytes = new Uint8Array(h.length / 2);
@@ -26,10 +26,12 @@ self.onmessage = async (e) => {
       maxDownloads,
       maxUploads,
       objectUrl,
+      logLevel,
     } = e.data;
 
     try {
       await init();
+      if (logLevel) setLogLevel(logLevel);
 
       const seed = fromHex(keyHex);
       const appKey = new AppKey(seed);

@@ -427,21 +427,20 @@
         <div class="label" style="margin-top:0.5rem;">Concurrency Limits</div>
         <div
           style="display:grid; grid-template-columns: 2fr 1fr; gap:0.5rem; align-items:center; margin-bottom:0.5rem;">
-          <label style="font-size:0.85rem; color:#999;">Max Price Fetches:</label>
-          <input id="cfg-max-price-fetches" type="number" min="1" value="10"
-            style="padding:0.4rem; text-align:center;" />
           <label style="font-size:0.85rem; color:#999;">Max Downloads:</label>
-          <input id="cfg-max-downloads" type="number" min="1" value="20"
+          <input id="cfg-max-downloads" type="number" min="1" value="8"
             style="padding:0.4rem; text-align:center;" />
           <label style="font-size:0.85rem; color:#999;">Max Uploads:</label>
-          <input id="cfg-max-uploads" type="number" min="1" value="16"
+          <input id="cfg-max-uploads" type="number" min="1" value="8"
             style="padding:0.4rem; text-align:center;" />
           <label style="font-size:0.85rem; color:#999;">Download Workers:</label>
-          <input id="cfg-download-workers" type="number" min="1" value="4"
+          <input id="cfg-download-workers" type="number" min="1" value="8"
             style="padding:0.4rem; text-align:center;" />
           <label style="font-size:0.85rem; color:#999;">Upload Workers:</label>
-          <input id="cfg-upload-workers" type="number" min="1" value="4"
+          <input id="cfg-upload-workers" type="number" min="1" value="8"
             style="padding:0.4rem; text-align:center;" />
+          <label for="cfg-debug-logging" style="font-size:0.85rem; color:#999; cursor:pointer;">Debug Logging:</label>
+          <input id="cfg-debug-logging" type="checkbox" style="cursor:pointer; justify-self:center;" />
         </div>
         <div style="font-size:0.75rem; color:#999; margin-bottom:0.75rem; line-height:1.4;">
           💡 Lower = more stable, higher = faster. Changes require reconnecting SDK.<br/>
@@ -538,16 +537,12 @@
           <div id="account-objects-count" style="font-size:1.75rem; font-weight:600; color:#10b981;">-</div>
         </div>
         <div style="background:#0a0a0a; padding:1.25rem; border-radius:6px; border:1px solid #222;">
-          <div style="color:#888; font-size:0.85rem; margin-bottom:0.5rem;">Storage Used</div>
-          <div id="account-used-storage" style="font-size:1.75rem; font-weight:600; color:#3b82f6;">-</div>
+          <div style="color:#888; font-size:0.85rem; margin-bottom:0.5rem;">Pinned Data</div>
+          <div id="account-pinned-data" style="font-size:1.75rem; font-weight:600; color:#3b82f6;">-</div>
         </div>
         <div style="background:#0a0a0a; padding:1.25rem; border-radius:6px; border:1px solid #222;">
           <div style="color:#888; font-size:0.85rem; margin-bottom:0.5rem;">Capacity</div>
           <div id="account-capacity-percent" style="font-size:1.75rem; font-weight:600; color:#8b5cf6;">-</div>
-        </div>
-        <div style="background:#0a0a0a; padding:1.25rem; border-radius:6px; border:1px solid #222;">
-          <div style="color:#888; font-size:0.85rem; margin-bottom:0.5rem;">Total Stored (3x)</div>
-          <div id="account-total-stored" style="font-size:1.75rem; font-weight:600; color:#f59e0b;">-</div>
         </div>
       </div>
 
@@ -736,6 +731,7 @@
       validateRecoveryPhrase,
       AppKey,
       Builder,
+      setLogLevel,
     } from './pkg/indexd_wasm.js';
 
     // Import file-type for MIME detection
@@ -783,10 +779,11 @@
     }
 
     function formatSize(bytes) {
-      if (bytes < 1024) return bytes + ' B';
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-      if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+      if (bytes < 1e3) return bytes + ' B';
+      if (bytes < 1e6) return (bytes / 1e3).toFixed(1) + ' KB';
+      if (bytes < 1e9) return (bytes / 1e6).toFixed(1) + ' MB';
+      if (bytes < 1e12) return (bytes / 1e9).toFixed(2) + ' GB';
+      return (bytes / 1e12).toFixed(2) + ' TB';
     }
 
     // Streaming download helper — avoids holding the entire file in WASM memory.
@@ -842,7 +839,7 @@
       }
 
       // 2. Spawn worker pool
-      const actualWorkers = Math.min(numWorkers, slabCount);
+      const actualWorkers = numWorkers;
 
       const config = {
         type: 'init',
@@ -852,6 +849,7 @@
         maxDownloads: getMaxDownloads(),
         maxUploads: getMaxUploads(),
         objectUrl,
+        logLevel: getLogLevel(),
       };
 
       status.textContent = `Connecting ${actualWorkers} download workers...`;
@@ -938,7 +936,7 @@
       const slabLengths = Array.from(obj.slabLengths());
       const totalSize = obj.size();
 
-      const actualWorkers = Math.min(numWorkers, slabCount);
+      const actualWorkers = numWorkers;
 
       const config = {
         type: 'init',
@@ -948,6 +946,7 @@
         maxDownloads: getMaxDownloads(),
         maxUploads: getMaxUploads(),
         objectUrl,
+        logLevel: getLogLevel(),
       };
 
       status.textContent = `Connecting ${actualWorkers} download workers...`;
@@ -1065,7 +1064,7 @@
       const dataKeyBuf = dataKey.buffer.slice(dataKey.byteOffset, dataKey.byteOffset + dataKey.byteLength);
 
       // 3. Spawn worker pool
-      const actualWorkers = Math.min(numWorkers, slabCount);
+      const actualWorkers = numWorkers;
 
       const config = {
         type: 'init',
@@ -1073,6 +1072,7 @@
         keyHex: getKeyHex(),
         maxPriceFetches: getMaxPriceFetches(),
         maxUploads: getMaxUploads(),
+        logLevel: getLogLevel(),
       };
 
       status.textContent = `Connecting ${actualWorkers} upload workers...`;
@@ -1176,27 +1176,29 @@
     // Auto-restore config from localStorage on page load
     const urlInput = document.getElementById('cfg-url');
     const keyInput = document.getElementById('cfg-key');
-    const maxPriceFetchesInput = document.getElementById('cfg-max-price-fetches');
     const maxDownloadsInput = document.getElementById('cfg-max-downloads');
     const maxUploadsInput = document.getElementById('cfg-max-uploads');
     const downloadWorkersInput = document.getElementById('cfg-download-workers');
     const uploadWorkersInput = document.getElementById('cfg-upload-workers');
+    const debugLoggingCheckbox = document.getElementById('cfg-debug-logging');
 
     const savedUrl = localStorage.getItem('indexer-url');
     const savedKey = localStorage.getItem('app-key');
-    const savedMaxPriceFetches = localStorage.getItem('max-price-fetches');
     const savedMaxDownloads = localStorage.getItem('max-downloads');
     const savedMaxUploads = localStorage.getItem('max-uploads');
     const savedDownloadWorkers = localStorage.getItem('download-workers');
     const savedUploadWorkers = localStorage.getItem('upload-workers');
+    const savedLogLevel = localStorage.getItem('log-level');
 
     if (savedUrl) urlInput.value = savedUrl;
     if (savedKey) keyInput.value = savedKey;
-    if (savedMaxPriceFetches) maxPriceFetchesInput.value = savedMaxPriceFetches;
     if (savedMaxDownloads) maxDownloadsInput.value = savedMaxDownloads;
     if (savedMaxUploads) maxUploadsInput.value = savedMaxUploads;
     if (savedDownloadWorkers) downloadWorkersInput.value = savedDownloadWorkers;
     if (savedUploadWorkers) uploadWorkersInput.value = savedUploadWorkers;
+    if (savedLogLevel === 'debug') {
+      debugLoggingCheckbox.checked = true;
+    }
 
     // Performance section toggle
     document.getElementById('performance-toggle').addEventListener('click', () => {
@@ -1218,10 +1220,6 @@
     keyInput.addEventListener('input', () => {
       localStorage.setItem('app-key', keyInput.value.trim());
     });
-    maxPriceFetchesInput.addEventListener('input', () => {
-      localStorage.setItem('max-price-fetches', maxPriceFetchesInput.value);
-      cachedSdk = null; // Invalidate SDK cache when concurrency settings change
-    });
     maxDownloadsInput.addEventListener('input', () => {
       localStorage.setItem('max-downloads', maxDownloadsInput.value);
       cachedSdk = null; // Invalidate SDK cache when concurrency settings change
@@ -1236,15 +1234,21 @@
     uploadWorkersInput.addEventListener('input', () => {
       localStorage.setItem('upload-workers', uploadWorkersInput.value);
     });
+    debugLoggingCheckbox.addEventListener('change', () => {
+      const level = debugLoggingCheckbox.checked ? 'debug' : 'info';
+      localStorage.setItem('log-level', level);
+      setLogLevel(level);
+    });
 
     // helpers to read shared config
     function getUrl() { return document.getElementById('cfg-url').value.trim(); }
     function getKeyHex() { return document.getElementById('cfg-key').value.trim(); }
-    function getMaxPriceFetches() { return parseInt(document.getElementById('cfg-max-price-fetches').value) || 10; }
-    function getMaxDownloads() { return parseInt(document.getElementById('cfg-max-downloads').value) || 20; }
-    function getMaxUploads() { return parseInt(document.getElementById('cfg-max-uploads').value) || 16; }
-    function getDownloadWorkers() { return parseInt(document.getElementById('cfg-download-workers').value) || 4; }
-    function getUploadWorkers() { return parseInt(document.getElementById('cfg-upload-workers').value) || 4; }
+    function getMaxPriceFetches() { return 10; }
+    function getMaxDownloads() { return parseInt(document.getElementById('cfg-max-downloads').value) || 8; }
+    function getMaxUploads() { return parseInt(document.getElementById('cfg-max-uploads').value) || 8; }
+    function getDownloadWorkers() { return parseInt(document.getElementById('cfg-download-workers').value) || 8; }
+    function getUploadWorkers() { return parseInt(document.getElementById('cfg-upload-workers').value) || 8; }
+    function getLogLevel() { return document.getElementById('cfg-debug-logging').checked ? 'debug' : null; }
 
     // SDK cache to avoid recreating and re-initializing
     let cachedSdk = null;
@@ -1259,10 +1263,9 @@
       }
 
       // Return cached SDK if config hasn't changed (include concurrency settings in cache key)
-      const maxPriceFetches = getMaxPriceFetches();
       const maxDownloads = getMaxDownloads();
       const maxUploads = getMaxUploads();
-      const currentConfig = `${url}|${keyHex}|${maxPriceFetches}|${maxDownloads}|${maxUploads}`;
+      const currentConfig = `${url}|${keyHex}|${maxDownloads}|${maxUploads}`;
       if (cachedSdk && cachedConfig === currentConfig) {
         statusEl.innerHTML = '<span class="pass">Using cached connection</span>';
         return cachedSdk;
@@ -1275,7 +1278,7 @@
       const builder = new Builder(url);
 
       // Configure concurrency limits
-      builder.withMaxPriceFetches(maxPriceFetches);
+      builder.withMaxPriceFetches(getMaxPriceFetches());
       builder.withMaxDownloads(maxDownloads);
       builder.withMaxUploads(maxUploads);
 
@@ -1294,17 +1297,16 @@
 
     await init();
     console.log('[JS] WASM module initialized successfully');
+    if (debugLoggingCheckbox.checked) setLogLevel('debug');
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
 
     // -- Performance Presets --
-    function setPreset(priceFetches, downloads, uploads, dlWorkers, ulWorkers) {
-      document.getElementById('cfg-max-price-fetches').value = priceFetches;
+    function setPreset(downloads, uploads, dlWorkers, ulWorkers) {
       document.getElementById('cfg-max-downloads').value = downloads;
       document.getElementById('cfg-max-uploads').value = uploads;
       document.getElementById('cfg-download-workers').value = dlWorkers;
       document.getElementById('cfg-upload-workers').value = ulWorkers;
-      localStorage.setItem('max-price-fetches', priceFetches);
       localStorage.setItem('max-downloads', downloads);
       localStorage.setItem('max-uploads', uploads);
       localStorage.setItem('download-workers', dlWorkers);
@@ -1312,9 +1314,9 @@
       cachedSdk = null; // Invalidate SDK cache
     }
 
-    document.getElementById('preset-conservative').addEventListener('click', () => setPreset(5, 10, 8, 2, 2));
-    document.getElementById('preset-balanced').addEventListener('click', () => setPreset(10, 20, 16, 4, 4));
-    document.getElementById('preset-fast').addEventListener('click', () => setPreset(10, 20, 20, 8, 8));
+    document.getElementById('preset-conservative').addEventListener('click', () => setPreset(4, 4, 4, 4));
+    document.getElementById('preset-balanced').addEventListener('click', () => setPreset(8, 8, 8, 8));
+    document.getElementById('preset-fast').addEventListener('click', () => setPreset(16, 16, 16, 16));
 
     // -- Recovery Phrase --
     document.getElementById('btn-generate').addEventListener('click', () => {
@@ -1491,7 +1493,6 @@
         const maxBytes = accountData.get('maxPinnedData');
         const freeBytes = maxBytes - usedBytes;
         const usedPercent = maxBytes > 0 ? (usedBytes / maxBytes * 100) : 0;
-        const totalStoredBytes = usedBytes * 3; // 3x redundancy
 
         // Update storage bar
         document.getElementById('account-storage-bar').style.width = `${usedPercent}%`;
@@ -1512,9 +1513,8 @@
 
         // Update quick stats
         document.getElementById('account-objects-count').textContent = objectCount.toLocaleString();
-        document.getElementById('account-used-storage').textContent = formatSize(usedBytes);
+        document.getElementById('account-pinned-data').textContent = formatSize(usedBytes);
         document.getElementById('account-capacity-percent').textContent = `${usedPercent.toFixed(1)}%`;
-        document.getElementById('account-total-stored').textContent = formatSize(totalStoredBytes);
 
         // Update account details (app is also a Map)
         const app = accountData.get('app');
@@ -1728,11 +1728,19 @@
         status.textContent = 'Uploading...';
 
         const uploadStart = performance.now();
-        const obj = await sdk.upload(data, (current, total) => {
+        const CHUNK_SIZE = 128 * 1024 * 1024;
+        const upload = sdk.streamingUpload(data.length, (current, total) => {
           progress.max = total;
           progress.value = current;
           status.textContent = `Uploading... ${current}/${total} shards`;
         });
+        (async () => {
+          for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
+            upload.pushChunk(data.subarray(offset, offset + CHUNK_SIZE));
+          }
+          upload.pushChunk(null);
+        })();
+        const obj = await upload.promise;
         const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
         const objectId = obj.id();
         const size = obj.size();
@@ -1764,7 +1772,7 @@
 
       try {
         const data = new TextEncoder().encode(text);
-        const file = new File([data], 'text-upload.dat');
+        const file = new File([data], 'text');
 
         status.innerHTML = `Uploading text (${formatSize(data.length)})...\n`;
 
@@ -1847,7 +1855,7 @@
       }
     });
 
-    // -- Simple File Upload (no workers, single-threaded sdk.upload()) --
+    // -- Simple File Upload (no workers, single-threaded streaming upload) --
     document.getElementById('btn-upload-file-simple').addEventListener('click', async () => {
       const status = document.getElementById('uf-status');
       const progress = document.getElementById('uf-progress');
@@ -1861,24 +1869,29 @@
       progress.value = 0;
 
       try {
-        status.innerHTML = `Simple upload: ${selectedFile.name} (${formatSize(selectedFile.size)})...\nReading file into memory...`;
-
-        const arrayBuf = await selectedFile.arrayBuffer();
-        const data = new Uint8Array(arrayBuf);
-
-        status.innerHTML += `\nFile read. Connecting...`;
+        status.innerHTML = `Uploading ${selectedFile.name} (${formatSize(selectedFile.size)})...`;
         const sdk = await connectSdk(status);
         if (!sdk) return;
 
         progress.style.display = 'block';
-        status.innerHTML += `\nUploading (single-threaded, no workers)...`;
 
         const uploadStart = performance.now();
-        const obj = await sdk.upload(data, (current, total) => {
+        const CHUNK_SIZE = 128 * 1024 * 1024;
+        const fileSize = selectedFile.size;
+        const upload = sdk.streamingUpload(fileSize, (current, total) => {
           progress.max = total;
           progress.value = current;
-          status.innerHTML = `Simple upload: ${selectedFile.name} (${formatSize(selectedFile.size)})\nUploading... ${current}/${total} shards`;
+          status.innerHTML = `Uploading ${selectedFile.name} (${formatSize(fileSize)})... ${current}/${total} shards`;
         });
+        (async () => {
+          for (let offset = 0; offset < fileSize; offset += CHUNK_SIZE) {
+            const chunk = selectedFile.slice(offset, offset + CHUNK_SIZE);
+            const data = new Uint8Array(await chunk.arrayBuffer());
+            upload.pushChunk(data);
+          }
+          upload.pushChunk(null);
+        })();
+        const obj = await upload.promise;
         const elapsed = ((performance.now() - uploadStart) / 1000).toFixed(1);
         const objectId = obj.id();
         const size = obj.size();
@@ -1888,7 +1901,7 @@
 
         await sdk.pinObject(obj);
 
-        status.innerHTML = `File: ${selectedFile.name}\nSize: ${formatSize(size)}\nSimple upload + pin completed in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
+        status.innerHTML = `File: ${selectedFile.name}\nSize: ${formatSize(size)}\nUpload + pin completed in ${elapsed}s\n<span class="pass">Pinned!</span>\n\nObject ID: ${objectId}`;
       } catch (e) {
         status.innerHTML += `\n<span class="fail">Error: ${e.message}</span>`;
       }
@@ -1965,7 +1978,7 @@
             return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
           };
 
-          const speedMBps = (speed / (1024 * 1024)).toFixed(2);
+          const speedMBps = (speed / 1e6).toFixed(2);
           const workers = getDownloadWorkers();
           const line1 = `Downloading... ${currentSlab}/${totalSlabs} slabs (${percentage}%) • ${formatSize(bytesDownloaded)} / ${formatSize(size)}`;
           const line2 = `${speedMBps} MB/s • ${formatTime(elapsed)} elapsed • ~${formatTime(eta)} remaining (${Math.min(workers, totalSlabs)} workers)`;
@@ -2352,8 +2365,8 @@
                 <div>10 data shards + 20 parity shards (need any 10 of 30)</div>
               </div>
               <div>
-                <div style="color:#888; font-size:0.85rem; margin-bottom:0.25rem;">Storage Efficiency:</div>
-                <div>3x redundancy (${formatSize(size * 3)} total stored)</div>
+                <div style="color:#888; font-size:0.85rem; margin-bottom:0.25rem;">Redundancy:</div>
+                <div>10 data + 20 parity (${formatSize(size)} pinned)</div>
               </div>
             </div>
             <button onclick="this.parentElement.parentElement.remove();" style="width:100%; padding:0.75rem; background:#333; color:white; border:none; border-radius:4px; cursor:pointer; font-size:1rem;">
@@ -4074,6 +4087,7 @@
         maxDownloads: getMaxDownloads(),
         maxUploads: getMaxUploads(),
         objectUrl: objectUrl,
+        logLevel: getLogLevel(),
       });
 
       try {

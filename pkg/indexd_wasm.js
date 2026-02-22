@@ -250,12 +250,14 @@ export function fetchHostSettings(address) {
 }
 
 /**
- * Install a panic hook and logging bridge so that Rust panics show a proper
- * stack trace and `log::debug!()` / `log::info!()` etc. appear in the browser
- * console.
+ * Sets the log level filter. Accepts "debug", "info", "warn", or "error".
+ * Allows JavaScript to control the verbosity of Rust logs at runtime.
+ * @param {string} level
  */
-export function init_panic_hook() {
-    wasm.init_panic_hook();
+export function setLogLevel(level) {
+    const ptr0 = passStringToWasm0(level, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    wasm.setLogLevel(ptr0, len0);
 }
 
 /**
@@ -269,6 +271,15 @@ export function validateRecoveryPhrase(phrase) {
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
+}
+
+/**
+ * Install a panic hook and logging bridge so that Rust panics show a proper
+ * stack trace and `log::debug!()` / `log::info!()` etc. appear in the browser
+ * console.
+ */
+export function init_panic_hook() {
+    wasm.init_panic_hook();
 }
 
 /**
@@ -288,12 +299,12 @@ export function generateRecoveryPhrase() {
     }
 }
 
-function wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2) {
-    wasm.wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2);
-}
-
 function wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1) {
     wasm.wasm_bindgen__convert__closures_____invoke__hdb2db1d6e822a6e9(arg0, arg1);
+}
+
+function wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2) {
+    wasm.wasm_bindgen__convert__closures_____invoke__hc18176fb1b5492d3(arg0, arg1, arg2);
 }
 
 function wasm_bindgen__convert__closures_____invoke__h0015dda4019b602e(arg0, arg1, arg2, arg3) {

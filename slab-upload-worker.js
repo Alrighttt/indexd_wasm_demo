@@ -2,7 +2,7 @@
 // Each worker creates its own SDK instance and uploads individual slabs
 // on demand. A pool of these workers enables true parallel slab uploads.
 
-import init, { AppKey, Builder } from './pkg/indexd_wasm.js';
+import init, { AppKey, Builder, setLogLevel } from './pkg/indexd_wasm.js';
 
 function fromHex(h) {
   const bytes = new Uint8Array(h.length / 2);
@@ -25,11 +25,13 @@ self.onmessage = async (e) => {
       maxUploads,
       workerIndex,
       numWorkers,
+      logLevel,
     } = e.data;
 
     try {
       console.log(`[upload-worker ${workerIndex}] init: maxUploads=${maxUploads}, maxPriceFetches=${maxPriceFetches}, numWorkers=${numWorkers}`);
       await init();
+      if (logLevel) setLogLevel(logLevel);
 
       const seed = fromHex(keyHex);
       const appKey = new AppKey(seed);
